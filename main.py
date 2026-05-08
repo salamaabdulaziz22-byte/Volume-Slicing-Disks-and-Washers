@@ -5,21 +5,23 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import re
 
-st.set_page_config(page_title="Universal Math Solver", layout="wide")
-st.title("Intelligent Volume Solver (Disks & Washers)")
+st.set_page_config(page_title="Universal Volume Solver", layout="wide")
+st.title("Intelligent Volume of Revolution Solver")
+st.markdown("---")
 
-# خانة إدخال السؤال
-raw_input = st.text_area("Enter your qustion:", 
-                         "y = sqrt(x), y = 0, from x = 0 to 4 about x-axis")
+# User Input Section
+raw_input = st.text_area("Paste your textbook question here:", 
+                         "Find the volume of the solid resulting from revolving the region bounded by y = sqrt(x) and y = 0 from x = 0 to x = 4 about the x-axis")
 
-if st.button("تحليل المسألة وتوليد الحل"):
+if st.button("Analyze & Solve"):
     try:
-        # 1. معالجة النص لاستخراج الدوال والحدود
+        # 1. Natural Language Processing to extract Math
+        # Cleans common copy-paste errors from PowerPoints/PDFs
         clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt').replace('vx', 'sqrt(x)')
         
-        # استخراج الدوال (y=...) أو (x=...)
+        # Extract equations (y=... or x=...)
         equations = re.findall(r'[xy]\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', clean_q)
-        # استخراج الأرقام للفترة
+        # Extract numerical intervals
         nums = re.findall(r'(\d+\.?\d*)', clean_q)
         
         if len(equations) >= 1:
@@ -27,62 +29,71 @@ if st.button("تحليل المسألة وتوليد الحل"):
             is_y_axis = 'y-axis' in clean_q
             var = y if is_y_axis else x
             
-            # تحديد الدالة الكبرى والصغرى
+            # Define Functions
             f_expr = sp.sympify(equations[0].strip())
             g_expr = sp.sympify(equations[1].strip()) if len(equations) > 1 else sp.sympify(0)
             
-            # تحديد نوع الطريقة تلقائياً
-            method = "Washer Method (الحلقات)" if g_expr != 0 else "Disk Method (الأقراص)"
+            # Automatically identify the method
+            method_type = "Washer Method" if g_expr != 0 else "Disk Method"
             
-            # تحديد الحدود
+            # Define Integration Limits
             a_val = float(nums[0]) if len(nums) > 0 else 0.0
             b_val = float(nums[1]) if len(nums) > 1 else 1.0
             if 'sqrt(3)' in clean_q: b_val = float(sp.sqrt(3).evalf())
 
-            st.success(f"✅ تم اكتشاف الطريقة: {method}")
+            st.success(f"✅ Method Detected: {method_type}")
             
-            # 2. عرض خطوات الحل
-            st.subheader("📝 خطوات الحل بالتفصيل")
+            # 2. Step-by-Step Calculus Display
+            st.subheader("📝 Step-by-Step Solution")
             col1, col2 = st.columns(2)
             
             with col1:
-                st.write("**1. إعداد التكامل:**")
+                st.write("**Step 1: Setup the Integral**")
                 st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} [({sp.latex(f_expr)})^2 - ({sp.latex(g_expr)})^2] \, d{var}")
                 
                 integrand = sp.simplify(f_expr**2 - g_expr**2)
-                st.write("**2. تبسيط الدالة داخل التكامل:**")
+                st.write("**Step 2: Simplify the Integrand**")
                 st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(integrand)}) \, d{var}")
                 
                 antideriv = sp.integrate(integrand, var)
-                st.write("**3. إيجاد المشتق العكسي:**")
+                st.write("**Step 3: Find the Antiderivative**")
                 st.latex(rf"V = \pi \left[ {sp.latex(antideriv)} \right]_{{{a_val}}}^{{{b_val}}}")
                 
                 final_vol = sp.pi * (antideriv.subs(var, b_val) - antideriv.subs(var, a_val))
-                st.write("**4. الناتج النهائي:**")
+                st.write("**Step 4: Evaluate and Final Result**")
                 st.latex(rf"V = {sp.latex(final_vol)} \approx {float(final_vol.evalf()):.4f}")
 
-            # 3. الرسم ثلاثي الأبعاد
+            # 3. 3D Visualization
             with col2:
-                st.subheader("📦 الرسم ثلاثي الأبعاد (3D)")
-                fig = plt.figure()
+                st.subheader("📦 3D Solid Visualization")
+                fig = plt.figure(figsize=(8, 6))
                 ax = fig.add_subplot(111, projection='3d')
                 
+                # Generate points for the surface
                 v_space = np.linspace(a_val, b_val, 50)
                 theta = np.linspace(0, 2*np.pi, 50)
                 V, THETA = np.meshgrid(v_space, theta)
                 
-                # حساب نصف القطر بناءً على الدالة المدخلة
-                f_num = sp.lambdify(var, f_expr, 'numpy')(V)
+                # Turn symbolic function into numeric for plotting
+                f_num_func = sp.lambdify(var, f_expr, 'numpy')
+                R = f_num_func(V)
                 
-                X = f_num * np.cos(THETA)
-                Z = f_num * np.sin(THETA)
-                Y = V
+                # Parametric equations for a solid of revolution
+                if is_y_axis:
+                    X_plot = R * np.cos(THETA)
+                    Z_plot = R * np.sin(THETA)
+                    Y_plot = V
+                else:
+                    Y_plot = R * np.cos(THETA)
+                    Z_plot = R * np.sin(THETA)
+                    X_plot = V
                 
-                ax.plot_surface(X, Y, Z, color='cyan', alpha=0.6)
+                ax.plot_surface(X_plot, Y_plot, Z_plot, color='orchid', alpha=0.7, edgecolor='k', lw=0.5)
+                ax.set_title("3D Revolution Model")
                 st.pyplot(fig)
                 
         else:
-            st.error("لم أتمكن من العثور على المعادلات. تأكدي من كتابتها بصيغة y = ...")
+            st.error("No equations detected. Please use format: 'y = ...' or 'x = ...'")
             
     except Exception as e:
-        st.error(f"حدث خطأ في التحليل: {e}")
+        st.error(f"Processing Error: {e}. Please ensure the math syntax is correct.")
