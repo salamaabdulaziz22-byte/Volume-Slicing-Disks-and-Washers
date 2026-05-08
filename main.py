@@ -7,10 +7,12 @@ import re
 
 # إعدادات الصفحة
 st.set_page_config(page_title="Math Solver Pro", layout="wide")
-st.title("Advanced Calculus Volume Solver")
+st.title(" Advanced Calculus Volume Solver")
+st.markdown(" ")
 
 # مدخلات المستخدم
 raw_input = st.text_area("Paste your calculus problem here:", height=150, 
+                         placeholder=" ")
 
 def solve_calculus():
     try:
