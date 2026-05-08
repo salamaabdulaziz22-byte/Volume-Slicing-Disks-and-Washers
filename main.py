@@ -11,7 +11,7 @@ st.write("Specifically designed for Disk and Washer methods with 100% accuracy."
 
 # Question Input Section
 st.sidebar.header("Problem Settings")
-raw_input = st.text_area("Paste the question here (e.g., y=x**2, y=4, about y-axis):", height=100)
+raw_input = st.text_area("Paste the question here:", height=100)
 
 if st.button("Solve with Step-by-Step Steps"):
     try:
