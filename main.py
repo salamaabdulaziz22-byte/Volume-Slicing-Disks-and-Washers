@@ -7,12 +7,10 @@ import re
 
 # إعدادات الصفحة
 st.set_page_config(page_title="Math Solver Pro", layout="wide")
-st.title("📐 Advanced Calculus Volume Solver")
-st.markdown("قم بلصق المسألة وسأقوم بتحليلها، حلها خطوة بخطوة، ورسمها 3D.")
+st.title("Advanced Calculus Volume Solver")
 
 # مدخلات المستخدم
 raw_input = st.text_area("Paste your calculus problem here:", height=150, 
-                         placeholder="مثال: y = sqrt(x), from x = 0 to 4 about x-axis")
 
 def solve_calculus():
     try:
