@@ -13,7 +13,7 @@ st.write("Specifically designed for Disk and Washer methods with 100% accuracy."
 st.sidebar.header("Problem Settings")
 raw_input = st.text_area("Paste the question here:", height=100)
 
-if st.button("Solve with Step-by-Step Steps"):
+if st.button("Solve"):
     try:
         # 1. Cleaning & Data Extraction
         text = raw_input.lower().replace('^', '**').replace('vx', 'sqrt(x)').replace('v', 'sqrt')
