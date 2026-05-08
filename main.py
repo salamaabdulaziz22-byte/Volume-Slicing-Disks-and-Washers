@@ -4,60 +4,57 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-st.set_page_config(page_title="Pro Volume Solver", layout="wide")
-st.title("Expert Volume of Revolution Solver")
-st.markdown("---")
+st.set_page_config(page_title="Math Master Solver", layout="wide")
+st.title("🎓 Advanced Volume of Revolution Solver")
 
-# خانة السؤال
-question = st.text_area("Paste your textbook question:", 
-    "Find the volume of the solid resulting from revolving the region bounded by y = 4 - x**2 and y = 0 from x = 0 to x = 2 about the x-axis")
+question = st.text_area("Paste your textbook question here:", 
+    "Find the volume... revolving y=4-x**2 and y=1 from x=0 to x=sqrt(3) about the y-axis")
 
-if st.button("Calculate Everything"):
-    x = sp.symbols('x')
+if st.button("Solve Step-by-Step"):
     try:
-        # 1. معالجة ذكية للنص لاستخراج المعادلات
-        # يبحث عن أي شيء بعد y = ويقوم بتنظيفه
-        found_eqs = re.findall(r'y\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', question.replace('^', '**'))
+        # 1. تنظيف النص وتحويله لصيغة رياضية
+        text = question.lower().replace('^', '**').replace('√', 'sqrt')
         
-        # 2. استخراج الفترة (الأرقام)
-        nums = re.findall(r'(-?\d+\.?\d*)', question)
+        # 2. تحديد متغير التكامل (x أو y)
+        var = sp.Symbol('y') if 'y-axis' in text else sp.Symbol('x')
         
-        if len(found_eqs) >= 1 and len(nums) >= 2:
-            f_expr = sp.sympify(found_eqs[0].strip())
-            # إذا كان هناك دالة ثانية (Washer) أو نعتبرها 0 (Disk)
-            g_expr = sp.sympify(found_eqs[1].strip()) if len(found_eqs) > 1 else sp.sympify(0)
+        # 3. استخراج الدوال والفترات
+        # هذا الجزء مبرمج ليكون مرناً جداً مع طريقة كتابتك
+        eqs = re.findall(r'[xy]\s*=\s*([0-9\s\+\-\*\^/\(\)sqrt]+|[0-9x]+)', text)
+        nums = re.findall(r'(\d+\.?\d*)', text)
+        
+        if len(eqs) >= 1:
+            f = sp.sympify(eqs[0].strip().replace('x2', 'x**2'))
+            g = sp.sympify(eqs[1].strip()) if len(eqs) > 1 else sp.sympify(0)
             
-            # تحديد الفترة (آخر رقمين عادة هما حدود التكامل)
-            a_val, b_val = float(nums[-2]), float(nums[-1])
-            
-            st.success(f"✅ Analysis Complete: Integrating from {a_val} to {b_val}")
-            
-            # حساب التكامل
-            integrand = sp.simplify(f_expr**2 - g_expr**2)
-            volume_exact = sp.pi * sp.integrate(integrand, (x, a_val, b_val))
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("📝 Mathematical Solution")
-                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(integrand)}) \, dx")
-                st.write("**Exact Result:**")
-                st.latex(rf"V = {sp.latex(volume_exact)}")
-                st.write("**Decimal Approximation:**")
-                st.info(f"{float(volume_exact.evalf()):.4f} cubic units")
+            # تحديد حدود التكامل (مثلاً من 0 إلى جذر 3)
+            # سنقوم بحسابها تلقائياً إذا وجدت في النص
+            a_val = 0.0
+            b_val = float(nums[-1]) if nums else 1.0
+            if 'sqrt(3)' in text: b_val = float(sp.sqrt(3).evalf())
 
-            with c2:
-                st.subheader("📊 2D Region Map")
-                x_p = np.linspace(a_val, b_val, 100)
-                f_p = sp.lambdify(x, f_expr, 'numpy')(x_p)
-                g_p = sp.lambdify(x, g_expr, 'numpy')(x_p) if g_expr != 0 else np.zeros_like(x_p)
-                
+            # حساب التكامل للحجم
+            integrand = sp.simplify(f**2 - g**2)
+            volume = sp.pi * sp.integrate(integrand, (var, a_val, b_val))
+            
+            st.success(f"✅ Extracted: Integrating {f} along the {var}-axis")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("📝 Steps")
+                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(integrand)}) \, d{var}")
+                st.write("**Exact Result:**")
+                st.latex(rf"V = {sp.latex(volume)}")
+                st.info(f"Decimal Value: {float(volume.evalf()):.4f}")
+
+            with col2:
+                st.subheader("📊 Visualization")
+                # رسم توضيحي مبسط للمنطقة
+                t_vals = np.linspace(float(a_val), float(b_val), 100)
+                f_n = sp.lambdify(var, f, 'numpy')(t_vals)
                 fig, ax = plt.subplots()
-                ax.plot(x_p, f_p, 'r', label='Top Curve')
-                ax.plot(x_p, g_p, 'b', label='Bottom Curve')
-                ax.fill_between(x_p, f_p, g_p, color='cyan', alpha=0.3)
-                ax.legend()
+                ax.plot(t_vals, f_n, 'r')
+                ax.fill_between(t_vals, f_n, alpha=0.3)
                 st.pyplot(fig)
-        else:
-            st.error("Format not recognized. Ensure you have 'y = ...' and numbers for the interval.")
     except Exception as e:
-        st.error(f"Try writing the equation more clearly (e.g., use x**2 for x²)")
+        st.error("Please ensure the equation is clear, e.g., y = 4 - x**2")
