@@ -2,87 +2,79 @@ import streamlit as st
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import re
 
-st.set_page_config(page_title="Universal Volume Solver", layout="wide")
-st.title("Calculus Volume Solver")
+st.set_page_config(page_title="Professional Volume Solver", layout="wide")
+st.title("Calculus Solver")
 
-# Flexible Text Input
-raw_input = st.text_area("Paste any volume problem here:", 
-                         placeholder="e.g., y = 4 - x**2, y = 1, from x=0 to sqrt(3) about y-axis")
+raw_input = st.text_area("Paste your textbook question:", height=150, 
+                         placeholder="e.g., y = 4 - x**2, y = 1, from x = 0 to sqrt(3) about y-axis")
 
-if st.button("Analyze & Solve"):
+if st.button("Solve Everything"):
     try:
-        # 1. Flexible Extraction Logic
-        # Convert visual math to python math
-        clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt').replace('vx', 'sqrt(x)')
+        # 1. THE CLEANER: Fixes common textbook typos/shorthand
+        text = raw_input.lower().replace('vx', 'sqrt(x)').replace('v3', 'sqrt(3)').replace('^', '**')
         
-        # Extract equations: Looks for anything after an '='
-        eq_found = re.findall(r'[yx]\s*=\s*([^, \n]+)', clean_q)
-        # Extract all numbers (integers or decimals)
-        nums = [float(n) for n in re.findall(r"[-+]?\d*\.\d+|\d+", clean_q)]
+        # 2. EXTRACTION: Find equations and numbers
+        eq_parts = re.findall(r'[yx]\s*=\s*([^, \n]+)', text)
+        nums_only = re.findall(r"sqrt\(\d+\)|\d+\.?\d*", text) # Finds numbers or sqrt(n)
         
-        if not eq_found:
-            st.error("No clear equations found. Use format 'y = ...' or 'x = ...'")
-        else:
-            x, y = sp.symbols('x y')
-            is_y_axis = 'y-axis' in clean_q or 'about y' in clean_q
+        x, y = sp.symbols('x y')
+        is_y_axis = 'y-axis' in text or 'about y' in text
+        
+        # 3. MATH LOGIC: Define functions
+        f_expr = sp.sympify(eq_parts[0])
+        g_expr = sp.sympify(eq_parts[1]) if len(eq_parts) > 1 else sp.sympify(0)
+        
+        # 4. LIMITS: Convert textbook limits to actual numbers
+        # If user writes 'sqrt(3)', we calculate its value for the graph
+        limit_a = float(sp.sympify(nums_only[0]).evalf()) if len(nums_only) >= 1 else 0
+        limit_b = float(sp.sympify(nums_only[1]).evalf()) if len(nums_only) >= 2 else 1
+
+        # 5. REVOLUTION LOGIC: Swap variables if rotating about Y
+        var = y if is_y_axis else x
+        if is_y_axis and 'x' in str(f_expr):
+            # Example 2.5 logic: if y = 4-x^2, solve for x -> sqrt(4-y)
+            f_expr = sp.solve(sp.Eq(y, f_expr), x)[-1] # Take positive branch
+            if g_expr != 0 and 'x' in str(g_expr):
+                g_expr = sp.solve(sp.Eq(y, g_expr), x)[-1]
+        
+        # 6. DISPLAY RESULTS
+        st.success(f"Method: {'Washer' if g_expr != 0 else 'Disk'}")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📝 Calculus Steps")
+            integrand = sp.simplify(f_expr**2 - g_expr**2)
+            st.latex(rf"V = \pi \int_{{{limit_a}}}^{{{limit_b}}} ({sp.latex(integrand)}) \, d{var}")
             
-            # Identify Method
-            f_expr = sp.sympify(eq_found[0].strip())
-            g_expr = sp.sympify(eq_found[1].strip()) if len(eq_found) > 1 else sp.sympify(0)
+            # Use sympify limits for exact fraction result (like 4.5pi)
+            exact_a, exact_b = sp.sympify(nums_only[0]), sp.sympify(nums_only[1])
+            volume_exact = sp.pi * sp.integrate(integrand, (var, exact_a, exact_b))
             
-            method = "Washer Method" if g_expr != 0 else "Disk Method"
-            st.success(f"✅ Method Identified: **{method}**")
+            st.write("**Final Answer:**")
+            st.latex(rf"V = {sp.latex(sp.simplify(volume_exact))} \approx {float(volume_exact.evalf()):.4f}")
 
-            # Limits Detection - Handles cases with fewer than 2 numbers gracefully
-            a = nums[0] if len(nums) >= 1 else 0
-            b = nums[1] if len(nums) >= 2 else 1
+        with col2:
+            st.subheader("📊 3D Visualization")
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
             
-            # Domain Logic: Rotate about Y-axis often requires solving for X
-            var = y if is_y_axis else x
-            if is_y_axis and 'x' in str(f_expr):
-                # Attempt to solve y = f(x) for x
-                solutions = sp.solve(sp.Eq(y, f_expr), x)
-                f_expr = solutions[0] # Take the positive/primary branch
-                if g_expr != 0:
-                    g_expr = sp.solve(sp.Eq(y, g_expr), x)[0]
-
-            # 2. Step-by-Step Solution
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("📝 Mathematical Solution")
-                integrand = sp.simplify(f_expr**2 - g_expr**2)
-                st.write("**1. Setup the Integral:**")
-                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(integrand)}) \, d{var}")
+            u = np.linspace(limit_a, limit_b, 40)
+            v = np.linspace(0, 2*np.pi, 40)
+            U, V = np.meshgrid(u, v)
+            
+            # Vectorize for numpy
+            r_func = sp.lambdify(var, f_expr, 'numpy')
+            R = r_func(U)
+            
+            if is_y_axis:
+                X, Y, Z = R*np.cos(V), U, R*np.sin(V)
+            else:
+                X, Y, Z = U, R*np.cos(V), R*np.sin(V)
                 
-                res = sp.integrate(integrand, (var, a, b))
-                final_v = sp.pi * res
-                st.write("**2. Final Result:**")
-                st.latex(rf"V = {sp.latex(sp.simplify(final_v))} \approx {float(final_v.evalf()):.4f}")
-
-            # 3. 3D Visualization
-            with col2:
-                st.subheader("📊 3D Visualization")
-                fig = plt.figure()
-                ax = fig.add_subplot(111, projection='3d')
-                
-                # Generate mesh
-                u_vals = np.linspace(float(a), float(b), 40)
-                v_vals = np.linspace(0, 2*np.pi, 40)
-                U, V = np.meshgrid(u_vals, v_vals)
-                
-                # Convert symbolic to numeric
-                f_num = sp.lambdify(var, f_expr, 'numpy')(U)
-                
-                if is_y_axis:
-                    X, Y, Z = f_num*np.cos(V), U, f_num*np.sin(V)
-                else:
-                    X, Y, Z = U, f_num*np.cos(V), f_num*np.sin(V)
-                
-                ax.plot_surface(X, Y, Z, alpha=0.8, cmap='viridis', edgecolor='none')
-                st.pyplot(fig)
-
+            ax.plot_surface(X, Y, Z, color='orchid', alpha=0.7)
+            st.pyplot(fig)
+            
     except Exception as e:
-        st.error(f"Analysis Error: {e}. Tip: Use 'x**2' for powers.")
+        st.error(f"Logic Error: {e}. Please ensure equations are clear (e.g. y = x**2).")
