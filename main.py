@@ -4,104 +4,100 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-# Page Configuration
-st.set_page_config(page_title="Calculus Volume Solver Pro", layout="wide")
-st.title("Geometric Analyzer for Volumes of Revolution")
-st.write("Specifically designed for Disk and Washer methods with 100% accuracy.")
+# Professional UI Branding
+st.set_page_config(page_title="Pro Calculus Solver", layout="wide")
+st.title("Volume of Revolution Solver")
+st.write("Designed for Lesson 6-2: Disks and Washers")
 
-# Question Input Section
-st.sidebar.header("Problem Settings")
-raw_input = st.text_area("Paste the question here:", height=100)
+# User Input
+raw_input = st.text_area("Paste Textbook Question:", height=100, 
+                         placeholder="e.g., y = x**2, y = 4, about the y-axis")
 
-if st.button("Solve"):
+if st.button("Generate Verified Solution"):
     try:
-        # 1. Cleaning & Data Extraction
+        # 1. PARSING & AXIS DETECTION
         text = raw_input.lower().replace('^', '**').replace('vx', 'sqrt(x)').replace('v', 'sqrt')
         x, y = sp.symbols('x y')
         
-        # Detect Rotation Axis
-        is_y_axis = any(word in text for word in ['y-axis', 'about y', 'around y', 'vertical'])
+        # Determine if we integrate with dy or dx
+        is_y_axis = any(word in text for word in ['y-axis', 'about y', 'vertical'])
         var = y if is_y_axis else x
         
-        # Extract Equations
+        # 2. EQUATION TRANSFORMATION (The "Secret Sauce")
+        # Extract all y=... or x=... expressions
         eqs = re.findall(r'[yx]\s*=\s*([^, \n]+)', text)
-        exprs = [sp.sympify(e) for e in eqs]
-
-        # 2. Variable Transformation (Critical Step)
-        # If rotating about y but equation is y=f(x), convert to x=g(y)
-        processed_exprs = []
-        for expr in exprs:
+        raw_exprs = [sp.sympify(e) for e in eqs]
+        
+        processed_funcs = []
+        for expr in raw_exprs:
+            # If rotating about Y, but eq is y=x**2, we must solve for x to get sqrt(y)
             if is_y_axis and 'x' in str(expr):
                 sol = sp.solve(sp.Eq(y, expr), x)
-                processed_exprs.append(sol[-1]) # Use the positive/right branch
+                processed_funcs.append(sol[-1]) # Pick the positive branch
             elif not is_y_axis and 'y' in str(expr):
                 sol = sp.solve(sp.Eq(x, expr), y)
-                processed_exprs.append(sol[-1])
+                processed_funcs.append(sol[-1])
             else:
-                processed_exprs.append(expr)
+                processed_funcs.append(expr)
 
-        # 3. Intersection Logic (Finding Bounds)
-        if len(processed_exprs) >= 2:
-            pts = sp.solve(sp.Eq(processed_exprs[0], processed_exprs[1]), var)
+        # 3. INTERSECTION LOGIC (Finding accurate Bounds)
+        if len(processed_funcs) >= 2:
+            pts = sp.solve(sp.Eq(processed_funcs[0], processed_funcs[1]), var)
         else:
-            pts = sp.solve(sp.Eq(processed_exprs[0], 0), var)
+            pts = sp.solve(sp.Eq(processed_funcs[0], 0), var)
+            
+        # Filter for real intersection points
+        real_pts = [p.evalf() for p in pts if p.is_real]
         
-        # Use intersection points as bounds; otherwise, look for numbers in text
-        if pts:
-            a, b = min(pts), max(pts)
+        if real_pts:
+            a, b = min(real_pts), max(real_pts)
         else:
+            # Fallback to scanning text for numbers if no intersection found
             nums = re.findall(r"sqrt\(\d+\)|\d+\.?\d*", text)
             a, b = sp.sympify(nums[-2]), sp.sympify(nums[-1])
 
-        # 4. R (Outer) vs r (Inner) Identification
-        R = processed_exprs[0]
-        r = processed_exprs[1] if len(processed_exprs) > 1 else sp.Integer(0)
+        # 4. R (Outer) vs r (Inner) IDENTIFICATION
+        R = processed_funcs[0]
+        r = processed_funcs[1] if len(processed_funcs) > 1 else sp.Integer(0)
         
-        # Ensure R is the outer radius for a positive result
-        mid_val = (float(a.evalf()) + float(b.evalf())) / 2
-        if abs(R.subs(var, mid_val)) < abs(r.subs(var, mid_val)):
+        # Test midpoint to ensure R is the outer radius (prevents negative volume)
+        mid_test = (float(a) + float(b)) / 2
+        if abs(R.subs(var, mid_test)) < abs(r.subs(var, mid_test)):
             R, r = r, R
 
-        # 5. Mathematical Calculations
+        # 5. INTEGRATION & RESULTS
         method = "Washer Method" if r != 0 else "Disk Method"
         integrand = sp.simplify(R**2 - r**2)
         volume_exact = sp.pi * sp.integrate(integrand, (var, a, b))
 
-        # 6. Display Results
-        st.success(f"Method Identified: {method}")
-        
+        # 6. UI OUTPUT
+        st.success(f"Method: {method}")
         col1, col2 = st.columns(2)
+        
         with col1:
-            st.subheader("📝 Detailed Solution Steps:")
-            st.write(f"**Integration Variable:** d{var}")
-            st.write("**1. Setup the Integral:**")
-            st.latex(rf"V = \pi \int_{{{sp.latex(a)}}}^{{{sp.latex(b)}}} \left[ ({sp.latex(R)})^2 - ({sp.latex(r)})^2 \right] d{var}")
-            
-            st.write("**2. Simplified Integrand:**")
-            st.latex(rf"V = \pi \int_{{{sp.latex(a)}}}^{{{sp.latex(b)}}} ({sp.latex(integrand)}) d{var}")
-            
-            st.write("**3. Final Value:**")
+            st.subheader("📝 Step-by-Step")
+            st.write(f"**Step 1: Variables** (Rotating about {'Y' if is_y_axis else 'X'}-axis, integrating with d{var})")
+            st.write("**Step 2: Setup**")
+            st.latex(rf"V = \pi \int_{{{sp.latex(a)}}}^{{{sp.latex(b)}}} [({sp.latex(R)})^2 - ({sp.latex(r)})^2] \, d{var}")
+            st.write("**Step 3: Evaluation**")
             st.latex(rf"V = {sp.latex(volume_exact)} \approx {float(volume_exact.evalf()):.4f}")
 
         with col2:
-            st.subheader("📊 3D Visualization Model:")
+            st.subheader("📊 3D Visualization")
             fig = plt.figure()
             ax = fig.add_subplot(111, projection='3d')
-            
-            u_mesh = np.linspace(float(a.evalf()), float(b.evalf()), 30)
-            v_mesh = np.linspace(0, 2*np.pi, 30)
-            U, V = np.meshgrid(u_mesh, v_mesh)
-            
-            r_func = sp.lambdify(var, R, 'numpy')
-            R_vals = r_func(U)
+            u = np.linspace(float(a), float(b), 30)
+            v = np.linspace(0, 2*np.pi, 30)
+            U, V = np.meshgrid(u, v)
+            r_numeric = sp.lambdify(var, R, 'numpy')(U)
             
             if is_y_axis:
-                X, Y, Z = R_vals*np.cos(V), U, R_vals*np.sin(V)
+                X, Y, Z = r_numeric*np.cos(V), U, r_numeric*np.sin(V)
             else:
-                X, Y, Z = U, R_vals*np.cos(V), R_vals*np.sin(V)
+                X, Y, Z = U, r_numeric*np.cos(V), r_numeric*np.sin(V)
             
             ax.plot_surface(X, Y, Z, color='cyan', alpha=0.6, edgecolor='black', lw=0.1)
             st.pyplot(fig)
 
     except Exception as e:
-        st.error(f"Error analyzing the question. Please ensure equations are clear. Details: {e}")
+        st.error(f"Logic Error: {e}. Please ensure the textbook prompt is complete.")
