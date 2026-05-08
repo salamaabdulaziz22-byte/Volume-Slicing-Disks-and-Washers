@@ -2,89 +2,88 @@ import streamlit as st
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import re
 
-# إعداد الصفحة وتصميم الواجهة
-st.set_page_config(page_title="Calculus Solver Pro", layout="wide")
-st.title("Advanced Volume Analyzer")
-st.write("Verified Step-by-Step Solver for Disks and Washers (Lesson 6-2)")
+# Page Configuration
+st.set_page_config(page_title="Universal Math Solver", layout="wide")
+st.title("Smart Calculus Volume Solver")
+st.markdown("---")
 
-# منطقة المدخلات في الجانب
-with st.sidebar:
-    st.header("Problem Parameters")
-    f_input = st.text_input("Upper Function f(x):", "sqrt(x)")
-    g_input = st.text_input("Lower Function g(x):", "x**2")
-    axis_val = st.text_input("Axis of Revolution (e.g., x=0 or y=2):", "x=0")
+# User Input - Starts empty for you to paste any question
+raw_input = st.text_area("Paste your calculus problem here:", value="", height=150, 
+                         placeholder="e.g., y = sqrt(x), from x = 0 to 4 about x-axis")
 
-if st.button("Generate Solution"):
-    try:
-        # 1. تعريف الرموز والمعادلات
-        x, y = sp.symbols('x y')
-        f = sp.sympify(f_input)
-        g = sp.sympify(g_input)
-        
-        # 2. إيجاد نقاط التقاطع (الحدود) تلقائياً
-        intersections = sp.solve(f - g, x)
-        real_pts = [p.evalf() for p in intersections if p.is_real]
-        
-        if not real_pts:
-            st.error("No intersection found. Please check your equations.")
-        else:
-            a_limit, b_limit = min(real_pts), max(real_pts)
+if st.button("Analyze & Solve"):
+    if not raw_input.strip():
+        st.warning("Please paste a question first.")
+    else:
+        try:
+            # 1. Advanced Extraction Logic
+            clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt').replace('vx', 'sqrt(x)')
             
-            # 3. تحديد نوع المحور (أفقي أم رأسي)
-            axis_type = 'y' if 'x' in axis_val else 'x'
-            axis_num = sp.sympify(axis_val.split('=')[1])
+            # Find all equations like y=... or x=...
+            equations = re.findall(r'([xy])\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', clean_q)
+            # Find all numbers for limits
+            nums = re.findall(r'(\d+\.?\d*)', clean_q)
             
-            # 4. حساب أنصاف الأقطار بناءً على اتجاه الدوران
-            if axis_type == 'y':  # دوران حول محور رأسي (التكامل بالنسبة لـ y)
-                # تحويل الدوال لتصبح بدلالة y
-                f_inv = sp.solve(sp.Eq(y, f), x)[0]
-                g_inv = sp.solve(sp.Eq(y, g), x)[0]
-                
-                # تحويل حدود التكامل لتناسب y
-                y_a = float(f.subs(x, a_limit))
-                y_b = float(f.subs(x, b_limit))
-                limits = (min(y_a, y_b), max(y_a, y_b))
-                
-                R_radius = sp.Abs(f_inv - axis_num)
-                r_radius = sp.Abs(g_inv - axis_num)
+            x, y = sp.symbols('x y')
+            is_y_axis = 'y-axis' in clean_q
+            
+            # Identify functions
+            f_expr = sp.sympify(equations[0][1].strip())
+            g_expr = sp.sympify(equations[1][1].strip()) if len(equations) > 1 else sp.sympify(0)
+            
+            # Automatic Limit Detection
+            if len(nums) >= 2:
+                a, b = float(nums[0]), float(nums[1])
+            else:
+                a, b = 0, 1 # Default if not found
+            
+            # Handle y-axis rotation conversion (If needed)
+            if is_y_axis and 'x' in str(f_expr):
+                # Solving y = f(x) for x to get x = g(y)
+                f_expr = sp.solve(sp.Eq(y, f_expr), x)[0]
                 var = y
-            else:  # دوران حول محور أفقي (التكامل بالنسبة لـ x)
-                R_radius = sp.Abs(f - axis_num)
-                r_radius = sp.Abs(g - axis_num)
+            else:
                 var = x
-                limits = (float(a_limit), float(b_limit))
 
-            # 5. حساب التكامل النهائي
-            integrand = sp.simplify(R_radius**2 - r_radius**2)
-            volume_exact = sp.pi * sp.integrate(integrand, (var, limits[0], limits[1]))
-            
-            # 6. عرض النتائج بخطوات واضحة
-            st.success("✅ Solution Successfully Generated")
+            # 2. Mathematical Steps
+            st.subheader("📝 Mathematical Solution")
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("📝 Methodology")
-                st.write(f"**Integration Variable:** d{var}")
-                st.write(f"**Interval:** [{limits[0]}, {limits[1]}]")
-                st.write("**Washer Method Formula:**")
-                st.latex(rf"V = \pi \int_{{{limits[0]}}}^{{{limits[1]}}} [({sp.latex(R_radius)})^2 - ({sp.latex(r_radius)})^2] \, d{var}")
+                integrand = sp.simplify(f_expr**2 - g_expr**2)
+                st.write("**1. Setup the Integral:**")
+                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(integrand)}) \, d{var}")
                 
-                st.write("**Exact Value:**")
-                st.latex(rf"V = {sp.latex(sp.simplify(volume_exact))}")
-                st.info(f"Approximate Volume: {float(volume_exact.evalf()):.4f}")
+                antideriv = sp.integrate(integrand, var)
+                st.write("**2. Anti-derivative:**")
+                st.latex(rf"V = \pi \left[ {sp.latex(antideriv)} \right]_{{{a}}}^{{{b}}}")
+                
+                final_val = sp.pi * (antideriv.subs(var, b) - antideriv.subs(var, a))
+                st.write("**3. Final Result:**")
+                st.latex(rf"V = {sp.latex(sp.simplify(final_val))} \approx {float(final_val.evalf()):.4f}")
 
+            # 3. Dynamic 3D Visualization
             with col2:
-                st.subheader("📊 2D Region Preview")
-                u = np.linspace(limits[0], limits[1], 100)
-                R_func = sp.lambdify(var, R_radius, 'numpy')
-                r_func = sp.lambdify(var, r_radius, 'numpy')
+                st.subheader("📊 3D Model")
+                fig = plt.figure(figsize=(8, 6))
+                ax = fig.add_subplot(111, projection='3d')
                 
-                fig, ax = plt.subplots()
-                ax.fill_between(u, R_func(u), r_func(u), color='orchid', alpha=0.4, label='Region')
-                ax.set_title("Cross-section View")
-                ax.legend()
+                v_vals = np.linspace(float(a), float(b), 50)
+                theta = np.linspace(0, 2*np.pi, 50)
+                V_mesh, THETA_mesh = np.meshgrid(v_vals, theta)
+                
+                r_num = sp.lambdify(var, f_expr, 'numpy')(V_mesh)
+                
+                if is_y_axis:
+                    X_p, Y_p, Z_p = r_num*np.cos(THETA_mesh), V_mesh, r_num*np.sin(THETA_mesh)
+                else:
+                    X_p, Y_p, Z_p = V_mesh, r_num*np.cos(THETA_mesh), r_num*np.sin(THETA_mesh)
+                
+                ax.plot_surface(X_p, Y_p, Z_p, color='cyan', alpha=0.6, edgecolor='k', lw=0.1)
                 st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"Mathematical Error: {e}")
+                
+        except Exception as e:
+            st.error(f"Error: {e}. Please try writing the equations clearly (e.g., y = 4 - x**2).")
