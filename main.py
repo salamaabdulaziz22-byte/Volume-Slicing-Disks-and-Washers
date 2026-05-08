@@ -5,85 +5,128 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import re
 
-# Page Configuration
-st.set_page_config(page_title="Universal Math Solver", layout="wide")
-st.title("Smart Calculus Volume Solver")
-st.markdown("---")
+# إعدادات الصفحة
+st.set_page_config(page_title="Math Solver Pro", layout="wide")
+st.title("📐 Advanced Calculus Volume Solver")
+st.markdown("قم بلصق المسألة وسأقوم بتحليلها، حلها خطوة بخطوة، ورسمها 3D.")
 
-# User Input - Starts empty for you to paste any question
-raw_input = st.text_area("Paste your calculus problem here:", value="", height=150, 
-                         placeholder="e.g., y = sqrt(x), from x = 0 to 4 about x-axis")
+# مدخلات المستخدم
+raw_input = st.text_area("Paste your calculus problem here:", height=150, 
+                         placeholder="مثال: y = sqrt(x), from x = 0 to 4 about x-axis")
 
-if st.button("Analyze & Solve"):
-    if not raw_input.strip():
-        st.warning("Please paste a question first.")
-    else:
-        try:
-            # 1. Advanced Extraction Logic
-            clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt').replace('vx', 'sqrt(x)')
-            
-            # Find all equations like y=... or x=...
-            equations = re.findall(r'([xy])\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', clean_q)
-            # Find all numbers for limits
-            nums = re.findall(r'(\d+\.?\d*)', clean_q)
-            
-            x, y = sp.symbols('x y')
-            is_y_axis = 'y-axis' in clean_q
-            
-            # Identify functions
-            f_expr = sp.sympify(equations[0][1].strip())
-            g_expr = sp.sympify(equations[1][1].strip()) if len(equations) > 1 else sp.sympify(0)
-            
-            # Automatic Limit Detection
-            if len(nums) >= 2:
-                a, b = float(nums[0]), float(nums[1])
-            else:
-                a, b = 0, 1 # Default if not found
-            
-            # Handle y-axis rotation conversion (If needed)
-            if is_y_axis and 'x' in str(f_expr):
-                # Solving y = f(x) for x to get x = g(y)
-                f_expr = sp.solve(sp.Eq(y, f_expr), x)[0]
-                var = y
-            else:
+def solve_calculus():
+    try:
+        # 1. تنظيف النص وتحليله
+        text = raw_input.lower()
+        x, y, z = sp.symbols('x y z')
+        
+        # استخراج الأرقام (الحدود)
+        numbers = [float(n) for n in re.findall(r"[-+]?\d*\.\d+|\d+", text)]
+        
+        # تحديد نوع المسألة
+        is_about_y = "about y-axis" in text or "about the y axis" in text
+        is_pyramid = "pyramid" in text
+        
+        st.subheader("📝 الخطوات الرياضية (Step-by-Step)")
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            if is_pyramid:
+                # حل مسألة الهرم (مثل المثال 2.1 في الصور)
+                side = max(numbers) # 180
+                height = min([n for n in numbers if n != side and n != 0] + [100]) # 100
+                
+                st.write(f"**1. تحديد دالة طول الضلع:**")
+                st.write(f"بما أن القاعدة مربعة والضلع يقل تدريجياً:")
+                f_x = (side/height) * (height - x)
+                st.latex(rf"f(x) = {sp.latex(f_x)}")
+                
+                st.write("**2. دالة المساحة A(x):**")
+                a_x = f_x**2
+                st.latex(rf"A(x) = ({sp.latex(f_x)})^2")
+                
+                a, b = 0, height
+                integrand = a_x
                 var = x
+                final_multiplier = 1 # لا يوجد pi في الهرم المربع
 
-            # 2. Mathematical Steps
-            st.subheader("📝 Mathematical Solution")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                integrand = sp.simplify(f_expr**2 - g_expr**2)
-                st.write("**1. Setup the Integral:**")
-                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(integrand)}) \, d{var}")
+            else:
+                # حل مسائل الدوران (Disks/Washers)
+                # استخراج الدوال (يبحث عن y=... أو f(x)=...)
+                func_matches = re.findall(r"(?:y|f\(x\)|x|g\(y\))\s*=\s*([^,]+)", text)
+                exprs = [sp.sympify(m.replace('^', '**').replace('√', 'sqrt').strip()) for m in func_matches]
                 
-                antideriv = sp.integrate(integrand, var)
-                st.write("**2. Anti-derivative:**")
-                st.latex(rf"V = \pi \left[ {sp.latex(antideriv)} \right]_{{{a}}}^{{{b}}}")
-                
-                final_val = sp.pi * (antideriv.subs(var, b) - antideriv.subs(var, a))
-                st.write("**3. Final Result:**")
-                st.latex(rf"V = {sp.latex(sp.simplify(final_val))} \approx {float(final_val.evalf()):.4f}")
+                if not exprs:
+                    st.error("لم أستطع التعرف على الدوال. حاول كتابتها بصيغة y = x**2")
+                    return
 
-            # 3. Dynamic 3D Visualization
-            with col2:
-                st.subheader("📊 3D Model")
-                fig = plt.figure(figsize=(8, 6))
-                ax = fig.add_subplot(111, projection='3d')
+                f_expr = exprs[0]
+                g_expr = exprs[1] if len(exprs) > 1 else sp.sympify(0)
                 
-                v_vals = np.linspace(float(a), float(b), 50)
-                theta = np.linspace(0, 2*np.pi, 50)
-                V_mesh, THETA_mesh = np.meshgrid(v_vals, theta)
+                # تحديد الحدود تلقائياً إذا لم توجد
+                a = min(numbers) if len(numbers) >= 2 else 0
+                b = max(numbers) if len(numbers) >= 2 else 1
                 
-                r_num = sp.lambdify(var, f_expr, 'numpy')(V_mesh)
-                
-                if is_y_axis:
-                    X_p, Y_p, Z_p = r_num*np.cos(THETA_mesh), V_mesh, r_num*np.sin(THETA_mesh)
+                if is_about_y:
+                    st.write("**نوع المسألة:** دوران حول المحور الصادي (y-axis)")
+                    var = y
+                    # إذا كانت الدالة تحتوي x، نحاول حلها بالنسبة لـ y
+                    if 'x' in str(f_expr):
+                        f_expr = sp.solve(sp.Eq(y, f_expr), x)[0]
                 else:
-                    X_p, Y_p, Z_p = V_mesh, r_num*np.cos(THETA_mesh), r_num*np.sin(THETA_mesh)
+                    st.write("**نوع المسألة:** دوران حول المحور السيني (x-axis)")
+                    var = x
+
+                integrand = sp.simplify(f_expr**2 - g_expr**2)
+                final_multiplier = sp.pi
                 
-                ax.plot_surface(X_p, Y_p, Z_p, color='cyan', alpha=0.6, edgecolor='k', lw=0.1)
-                st.pyplot(fig)
+                st.write("**1. إعداد التكامل:**")
+                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left( {sp.latex(f_expr)}^2 - {sp.latex(g_expr)}^2 \right) d{var}")
+
+            # حساب التكامل
+            antideriv = sp.integrate(integrand, var)
+            result = sp.integrate(integrand, (var, a, b)) * final_multiplier
+            
+            st.write("**2. المشتقة العكسية:**")
+            st.latex(rf"{sp.latex(antideriv)}")
+            
+            st.write("**3. النتيجة النهائية:**")
+            st.success(f"النتيجة: {result}")
+            st.latex(rf"V = {sp.latex(sp.simplify(result))} \approx {float(result.evalf()):,.2f}")
+
+        # 3. الرسم البياني 3D
+        with col2:
+            st.subheader("📊 المجسم الناتج (3D View)")
+            fig = plt.figure(figsize=(8, 8))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            u = np.linspace(float(a), float(b), 60)
+            v = np.linspace(0, 2 * np.pi, 60)
+            U, V = np.meshgrid(u, v)
+            
+            # تحويل الدالة لرقمية للرسم
+            f_num = sp.lambdify(var, f_expr if not is_pyramid else sp.sqrt(a_x), 'numpy')
+            R = f_num(U)
+            
+            if is_about_y or is_pyramid: # في الهرم والرسم الرأسي
+                X_p = R * np.cos(V)
+                Z_p = R * np.sin(V)
+                Y_p = U
+            else:
+                X_p = U
+                Y_p = R * np.cos(V)
+                Z_p = R * np.sin(V)
                 
-        except Exception as e:
-            st.error(f"Error: {e}. Please try writing the equations clearly (e.g., y = 4 - x**2).")
+            surf = ax.plot_surface(X_p, Y_p, Z_p, cmap='viridis', alpha=0.7, edgecolor='none')
+            ax.set_title("Solid of Revolution / Volume Shape")
+            st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء التحليل: {e}")
+        st.info("نصيحة: تأكد من كتابة الدالة بوضوح مثل y = sqrt(x) والحدود من 0 إلى 4.")
+
+if st.button("تحليل وحل المسألة"):
+    if raw_input:
+        solve_calculus()
+    else:
+        st.warning("الرجاء إدخال نص المسألة أولاً.")
