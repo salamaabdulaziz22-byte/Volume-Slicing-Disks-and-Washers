@@ -4,103 +4,359 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-# 1. UI Configuration
-st.set_page_config(page_title="STEM Volume Solver", layout="wide")
-st.title("Volume of Revolution Solver")
-st.write("Professional Tool for Disks and Washers Method (Lesson 6-2)")
+# =====================================================
+# STEM Volume Solver
+# Volume: Disks and Washers
+# =====================================================
 
-# 2. Input Area
-raw_input = st.text_area("Enter problem text:", height=100, 
-                         placeholder="Example: y = x**2, y = 4, about y-axis")
+st.set_page_config(page_title="Volume Solver", layout="wide")
 
-if st.button("Solve Step-by-Step"):
+st.title("STEM Volume Solver")
+st.subheader("Volume: Disks and Washers Method")
+
+st.write("""
+Enter a problem like:
+
+• y = x^2 , y = 4 about x-axis  
+• y = x^2 , y = 0 about x-axis  
+• x = y^2 , x = 4 about y-axis
+""")
+
+# =====================================================
+# USER INPUT
+# =====================================================
+
+problem = st.text_area(
+    "Enter Problem:",
+    height=120,
+    placeholder="Example: y = x^2 , y = 4 about x-axis"
+)
+
+solve = st.button("Solve Step-by-Step")
+
+# =====================================================
+# MAIN PROGRAM
+# =====================================================
+
+if solve:
+
     try:
-        # A. Symbols and Axis Detection
+
+        # =====================================================
+        # SYMBOLS
+        # =====================================================
+
         x, y = sp.symbols('x y')
-        text = raw_input.lower().replace('^', '**').replace('vx', 'sqrt(x)')
-        
-        # Determine Axis of Revolution
-        is_y_axis = any(word in text for word in ['y-axis', 'about y', 'vertical'])
-        var = y if is_y_axis else x
-        
-        # B. Smart Equation Extraction
-        # Find all parts like 'y = ...' or 'x = ...'
-        found_eqs = re.findall(r'[yx]\s*=\s*([^, \n]+)', text)
-        raw_exprs = [sp.sympify(e) for e in found_eqs]
-        
-        # C. Variable Transformation (Crucial for y-axis rotation)
-        # If axis is Y, we need x = f(y). If axis is X, we need y = f(x).
-        final_funcs = []
-        for expr in raw_exprs:
-            if is_y_axis and 'x' in str(expr):
-                # Solve y = f(x) for x
-                sol = sp.solve(sp.Eq(y, expr), x)
-                final_funcs.append(sol[-1]) # Use positive/right-hand branch
-            elif not is_y_axis and 'y' in str(expr):
-                # Solve x = f(y) for y
-                sol = sp.solve(sp.Eq(x, expr), y)
-                final_funcs.append(sol[-1])
-            else:
-                final_funcs.append(expr)
 
-        # D. Dynamic Boundary Detection (Intersections)
-        # Find where the curves meet to set the limits of integration
-        if len(final_funcs) >= 2:
-            pts = sp.solve(sp.Eq(final_funcs[0], final_funcs[1]), var)
+        text = problem.lower()
+
+        # Clean input
+        text = text.replace("^", "**")
+        text = text.replace("√x", "sqrt(x)")
+
+        # =====================================================
+        # DETECT AXIS OF ROTATION
+        # =====================================================
+
+        axis = ""
+
+        if "x-axis" in text or "about x" in text:
+            axis = "x-axis"
+
+        elif "y-axis" in text or "about y" in text:
+            axis = "y-axis"
+
         else:
-            pts = sp.solve(sp.Eq(final_funcs[0], 0), var)
-        
-        # Clean points to get real numerical limits
-        real_pts = [p.evalf() for p in pts if p.is_real]
-        if real_pts:
-            a, b = min(real_pts), max(real_pts)
+            st.error("Please specify axis of rotation.")
+            st.stop()
+
+        # =====================================================
+        # EXTRACT EQUATIONS
+        # =====================================================
+
+        equations = re.findall(r'[yx]\s*=\s*[^,]+', text)
+
+        if len(equations) < 2:
+            st.error("Please enter two equations.")
+            st.stop()
+
+        eq1 = equations[0].strip()
+        eq2 = equations[1].strip()
+
+        # =====================================================
+        # PARSE EQUATIONS
+        # =====================================================
+
+        def parse_equation(eq):
+
+            left, right = eq.split("=")
+
+            left = left.strip()
+            right = right.strip()
+
+            expr = sp.sympify(right)
+
+            return left, expr
+
+        var1, expr1 = parse_equation(eq1)
+        var2, expr2 = parse_equation(eq2)
+
+        # =====================================================
+        # DETERMINE METHOD
+        # =====================================================
+
+        method = ""
+
+        # Disk if one curve is axis
+        if expr1 == 0 or expr2 == 0:
+            method = "Disk Method"
         else:
-            # Fallback to scanning text for explicit limits (from x=0 to x=2)
-            nums = re.findall(r"sqrt\(\d+\)|\d+\.?\d*", text)
-            a, b = sp.sympify(nums[-2]), sp.sympify(nums[-1])
+            method = "Washer Method"
 
-        # E. Radius Logic (R vs r)
-        R_outer = final_funcs[0]
-        r_inner = final_funcs[1] if len(final_funcs) > 1 else sp.Integer(0)
-        
-        # Ensure R is the larger radius at midpoint
-        mid = (float(a) + float(b)) / 2
-        if abs(float(R_outer.subs(var, mid))) < abs(float(r_inner.subs(var, mid))):
-            R_outer, r_inner = r_inner, R_outer
+        # =====================================================
+        # DISPLAY BASIC INFO
+        # =====================================================
 
-        # F. Calculus Calculation
-        method = "Washer Method" if r_inner != 0 else "Disk Method"
-        integrand = sp.simplify(R_outer**2 - r_inner**2)
-        volume_exact = sp.pi * sp.integrate(integrand, (var, a, b))
+        st.header("Problem Analysis")
 
-        # G. Professional Output
-        st.success(f"Method Identified: {method}")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📝 Solution Steps")
-            st.write(f"**Variable:** Integrating with respect to d{var}")
-            st.write("**Integral Setup:**")
-            st.latex(rf"V = \pi \int_{{{sp.latex(a)}}}^{{{sp.latex(b)}}} [({sp.latex(R_outer)})^2 - ({sp.latex(r_inner)})^2] \, d{var}")
-            st.write("**Simplified Result:**")
-            st.latex(rf"V = {sp.latex(volume_exact)} \approx {float(volume_exact.evalf()):.4f}")
+        st.success(f"Axis of Rotation: {axis}")
+        st.success(f"Method: {method}")
 
-        with col2:
-            st.subheader("📊 3D Geometric Model")
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            u = np.linspace(float(a), float(b), 40)
-            v = np.linspace(0, 2*np.pi, 40)
-            U, V = np.meshgrid(u, v)
-            radius_vals = sp.lambdify(var, R_outer, 'numpy')(U)
-            
-            if is_y_axis:
-                X, Y, Z = radius_vals*np.cos(V), U, radius_vals*np.sin(V)
+        # =====================================================
+        # CASE 1 : ROTATION ABOUT X-AXIS
+        # =====================================================
+
+        if axis == "x-axis":
+
+            # Need y functions
+            if var1 != 'y' or var2 != 'y':
+                st.error("For x-axis rotation, equations must be in y = form.")
+                st.stop()
+
+            outer = sp.Max(expr1, expr2)
+            inner = sp.Min(expr1, expr2)
+
+            # Find intersection points
+            intersections = sp.solve(sp.Eq(expr1, expr2), x)
+
+            real_points = []
+
+            for val in intersections:
+                if val.is_real:
+                    real_points.append(val)
+
+            if len(real_points) < 2:
+
+                if len(real_points) == 1:
+                    a = 0
+                    b = real_points[0]
+                else:
+                    st.error("Could not determine bounds.")
+                    st.stop()
+
             else:
-                X, Y, Z = U, radius_vals*np.cos(V), radius_vals*np.sin(V)
-            
-            ax.plot_surface(X, Y, Z, color='cyan', alpha=0.5, edgecolor='k', lw=0.1)
+                a = min(real_points)
+                b = max(real_points)
+
+            # =====================================================
+            # SHOW STEPS
+            # =====================================================
+
+            st.header("Step-by-Step Solution")
+
+            st.subheader("Step 1: Determine Radius")
+
+            st.latex(f"R(x) = {sp.latex(outer)}")
+            st.latex(f"r(x) = {sp.latex(inner)}")
+
+            st.subheader("Step 2: Volume Formula")
+
+            if method == "Disk Method":
+
+                formula = sp.pi * (outer**2)
+
+                st.latex(
+                    rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(outer)})^2 \, dx"
+                )
+
+            else:
+
+                formula = sp.pi * (outer**2 - inner**2)
+
+                st.latex(
+                    rf"V = \pi \int_{{{a}}}^{{{b}}}"
+                    rf"\left(({sp.latex(outer)})^2 - ({sp.latex(inner)})^2\right)dx"
+                )
+
+            # =====================================================
+            # INTEGRATION
+            # =====================================================
+
+            st.subheader("Step 3: Integrate")
+
+            volume = sp.integrate(formula, (x, a, b))
+
+            integral_expr = sp.integrate(formula, x)
+
+            st.latex(
+                rf"V = {sp.latex(volume)}"
+            )
+
+            # =====================================================
+            # GRAPH
+            # =====================================================
+
+            st.header("Graph")
+
+            x_vals = np.linspace(float(a)-1, float(b)+1, 400)
+
+            f1 = sp.lambdify(x, expr1, 'numpy')
+            f2 = sp.lambdify(x, expr2, 'numpy')
+
+            y1_vals = f1(x_vals)
+            y2_vals = f2(x_vals)
+
+            fig, ax = plt.subplots(figsize=(8,5))
+
+            ax.plot(x_vals, y1_vals, label=f"y = {expr1}")
+            ax.plot(x_vals, y2_vals, label=f"y = {expr2}")
+
+            ax.fill_between(
+                x_vals,
+                y1_vals,
+                y2_vals,
+                alpha=0.3
+            )
+
+            ax.axhline(0)
+
+            ax.set_title(f"{method} around {axis}")
+
+            ax.legend()
+
             st.pyplot(fig)
 
+        # =====================================================
+        # CASE 2 : ROTATION ABOUT Y-AXIS
+        # =====================================================
+
+        elif axis == "y-axis":
+
+            # Need x functions
+            if var1 != 'x' or var2 != 'x':
+                st.error("For y-axis rotation, equations must be in x = form.")
+                st.stop()
+
+            outer = sp.Max(expr1, expr2)
+            inner = sp.Min(expr1, expr2)
+
+            # Find intersections
+            intersections = sp.solve(sp.Eq(expr1, expr2), y)
+
+            real_points = []
+
+            for val in intersections:
+                if val.is_real:
+                    real_points.append(val)
+
+            if len(real_points) < 2:
+
+                if len(real_points) == 1:
+                    a = 0
+                    b = real_points[0]
+                else:
+                    st.error("Could not determine bounds.")
+                    st.stop()
+
+            else:
+                a = min(real_points)
+                b = max(real_points)
+
+            # =====================================================
+            # SHOW STEPS
+            # =====================================================
+
+            st.header("Step-by-Step Solution")
+
+            st.subheader("Step 1: Determine Radius")
+
+            st.latex(f"R(y) = {sp.latex(outer)}")
+            st.latex(f"r(y) = {sp.latex(inner)}")
+
+            st.subheader("Step 2: Volume Formula")
+
+            if method == "Disk Method":
+
+                formula = sp.pi * (outer**2)
+
+                st.latex(
+                    rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(outer)})^2 \, dy"
+                )
+
+            else:
+
+                formula = sp.pi * (outer**2 - inner**2)
+
+                st.latex(
+                    rf"V = \pi \int_{{{a}}}^{{{b}}}"
+                    rf"\left(({sp.latex(outer)})^2 - ({sp.latex(inner)})^2\right)dy"
+                )
+
+            # =====================================================
+            # INTEGRATION
+            # =====================================================
+
+            st.subheader("Step 3: Integrate")
+
+            volume = sp.integrate(formula, (y, a, b))
+
+            st.latex(
+                rf"V = {sp.latex(volume)}"
+            )
+
+            # =====================================================
+            # GRAPH
+            # =====================================================
+
+            st.header("Graph")
+
+            y_vals = np.linspace(float(a)-1, float(b)+1, 400)
+
+            f1 = sp.lambdify(y, expr1, 'numpy')
+            f2 = sp.lambdify(y, expr2, 'numpy')
+
+            x1_vals = f1(y_vals)
+            x2_vals = f2(y_vals)
+
+            fig, ax = plt.subplots(figsize=(8,5))
+
+            ax.plot(x1_vals, y_vals, label=f"x = {expr1}")
+            ax.plot(x2_vals, y_vals, label=f"x = {expr2}")
+
+            ax.fill_betweenx(
+                y_vals,
+                x1_vals,
+                x2_vals,
+                alpha=0.3
+            )
+
+            ax.axvline(0)
+
+            ax.set_title(f"{method} around {axis}")
+
+            ax.legend()
+
+            st.pyplot(fig)
+
+        # =====================================================
+        # FINAL ANSWER
+        # =====================================================
+
+        st.header("Final Answer")
+
+        st.success(f"Volume = {sp.simplify(volume)}")
+
     except Exception as e:
-        st.error(f"Mathematical Error: {e}. Ensure you include the equations and the axis (x or y).")
+
+        st.error("Error while solving the problem.")
+        st.code(str(e))
