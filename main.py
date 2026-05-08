@@ -9,7 +9,7 @@ st.set_page_config(page_title="Universal Math Solver", layout="wide")
 st.title("Intelligent Volume Solver (Disks & Washers)")
 
 # خانة إدخال السؤال
-raw_input = st.text_area("أدخلي السؤال هنا (مثال: y=sqrt(x), y=0, x=0 to 4 about x-axis):", 
+raw_input = st.text_area("Enter your qustion:", 
                          "y = sqrt(x), y = 0, from x = 0 to 4 about x-axis")
 
 if st.button("تحليل المسألة وتوليد الحل"):
