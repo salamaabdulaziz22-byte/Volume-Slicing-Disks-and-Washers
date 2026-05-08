@@ -6,7 +6,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import re
 
 st.set_page_config(page_title="Universal Volume Solver", layout="wide")
-st.title("🚀 Universal Calculus Volume Solver")
+st.title("Calculus Volume Solver")
 
 # Flexible Text Input
 raw_input = st.text_area("Paste any volume problem here:", 
