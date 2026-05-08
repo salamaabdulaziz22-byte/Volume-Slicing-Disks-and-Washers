@@ -3,69 +3,88 @@ import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 1. Page Configuration
-st.set_page_config(page_title="Calculus Volume Solver", layout="wide")
+# إعداد الصفحة وتصميم الواجهة
+st.set_page_config(page_title="Calculus Solver Pro", layout="wide")
 st.title("Advanced Volume Analyzer")
-st.write("Professional Solver for Disk & Washer methods (Lesson 6-2)")
+st.write("Verified Step-by-Step Solver for Disks and Washers (Lesson 6-2)")
 
-# 2. Sidebar for Precise Inputs
+# منطقة المدخلات في الجانب
 with st.sidebar:
-    st.header("Problem Settings")
+    st.header("Problem Parameters")
     f_input = st.text_input("Upper Function f(x):", "sqrt(x)")
     g_input = st.text_input("Lower Function g(x):", "x**2")
     axis_val = st.text_input("Axis of Revolution (e.g., x=0 or y=2):", "x=0")
 
-# 3. Main Calculation Logic
-if st.button("Generate Verified Solution"):
+if st.button("Generate Solution"):
     try:
-        # Define Symbols
+        # 1. تعريف الرموز والمعادلات
         x, y = sp.symbols('x y')
         f = sp.sympify(f_input)
         g = sp.sympify(g_input)
         
-        # A. Automatic Intersection Detection (Limits)
+        # 2. إيجاد نقاط التقاطع (الحدود) تلقائياً
         intersections = sp.solve(f - g, x)
         real_pts = [p.evalf() for p in intersections if p.is_real]
         
         if not real_pts:
-            st.error("No intersection points found. Please check your functions.")
+            st.error("No intersection found. Please check your equations.")
         else:
             a_limit, b_limit = min(real_pts), max(real_pts)
             
-            # B. Axis Analysis
+            # 3. تحديد نوع المحور (أفقي أم رأسي)
             axis_type = 'y' if 'x' in axis_val else 'x'
             axis_num = sp.sympify(axis_val.split('=')[1])
             
-            # C. Radius and Variable Transformation
-            if axis_type == 'y':  # Vertical Rotation (integrating dy)
-                # Solve functions for x to get them in terms of y
+            # 4. حساب أنصاف الأقطار بناءً على اتجاه الدوران
+            if axis_type == 'y':  # دوران حول محور رأسي (التكامل بالنسبة لـ y)
+                # تحويل الدوال لتصبح بدلالة y
                 f_inv = sp.solve(sp.Eq(y, f), x)[0]
                 g_inv = sp.solve(sp.Eq(y, g), x)[0]
                 
-                # Convert boundaries to y-limits
-                y_a, y_b = float(f.subs(x, a_limit)), float(f.subs(x, b_limit))
+                # تحويل حدود التكامل لتناسب y
+                y_a = float(f.subs(x, a_limit))
+                y_b = float(f.subs(x, b_limit))
                 limits = (min(y_a, y_b), max(y_a, y_b))
                 
                 R_radius = sp.Abs(f_inv - axis_num)
                 r_radius = sp.Abs(g_inv - axis_num)
                 var = y
-            else:  # Horizontal Rotation (integrating dx)
+            else:  # دوران حول محور أفقي (التكامل بالنسبة لـ x)
                 R_radius = sp.Abs(f - axis_num)
                 r_radius = sp.Abs(g - axis_num)
                 var = x
                 limits = (float(a_limit), float(b_limit))
 
-            # D. Calculus Integration
+            # 5. حساب التكامل النهائي
             integrand = sp.simplify(R_radius**2 - r_radius**2)
             volume_exact = sp.pi * sp.integrate(integrand, (var, limits[0], limits[1]))
             
-            # 4. Displaying Results
-            st.success("✅ Mathematical Solution Generated")
+            # 6. عرض النتائج بخطوات واضحة
+            st.success("✅ Solution Successfully Generated")
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("📝 Step-by-Step Methodology")
-                st.write(f"**Variable:** d{var}")
-                st.write(f"**Limits:** from {limits[0]} to {limits[1]}")
-                st.write("**Formula:**")
-                st.latex(rf"V = \pi \int
+                st.subheader("📝 Methodology")
+                st.write(f"**Integration Variable:** d{var}")
+                st.write(f"**Interval:** [{limits[0]}, {limits[1]}]")
+                st.write("**Washer Method Formula:**")
+                st.latex(rf"V = \pi \int_{{{limits[0]}}}^{{{limits[1]}}} [({sp.latex(R_radius)})^2 - ({sp.latex(r_radius)})^2] \, d{var}")
+                
+                st.write("**Exact Value:**")
+                st.latex(rf"V = {sp.latex(sp.simplify(volume_exact))}")
+                st.info(f"Approximate Volume: {float(volume_exact.evalf()):.4f}")
+
+            with col2:
+                st.subheader("📊 2D Region Preview")
+                u = np.linspace(limits[0], limits[1], 100)
+                R_func = sp.lambdify(var, R_radius, 'numpy')
+                r_func = sp.lambdify(var, r_radius, 'numpy')
+                
+                fig, ax = plt.subplots()
+                ax.fill_between(u, R_func(u), r_func(u), color='orchid', alpha=0.4, label='Region')
+                ax.set_title("Cross-section View")
+                ax.legend()
+                st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Mathematical Error: {e}")
