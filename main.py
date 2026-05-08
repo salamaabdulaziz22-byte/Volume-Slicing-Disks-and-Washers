@@ -5,94 +5,76 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import re
 
-# Page Configuration
-st.set_page_config(page_title="Universal Math Solver", layout="wide")
-st.title("Smart Calculus Volume Solver")
-st.markdown("---")
+st.set_page_config(page_title="Universal Volume Solver", layout="wide")
+st.title("Calculus Volume Solver")
 
-# User Input
-raw_input = st.text_area("Paste your calculus problem here:", value="", height=150, 
-                         placeholder="e.g., y = sqrt(x), from x = 0 to 4 about x-axis")
+# مدخل النص
+raw_input = st.text_area("أدخلي مسألة التكامل هنا (بأي صيغة):", 
+                         placeholder="مثال: y = x**2, y = 1, from x=0 to 2 about y-axis")
 
-if st.button("Analyze & Solve"):
-    if not raw_input.strip():
-        st.warning("Please paste a question first.")
-    else:
-        try:
-            # 1. Processing Input
-            clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt').replace('vx', 'sqrt(x)')
-            equations = re.findall(r'([xy])\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', clean_q)
-            nums = re.findall(r'(\d+\.?\d*)', clean_q)
-            
+if st.button("تحليل وحل المسألة"):
+    try:
+        # 1. تنظيف وتحليل النص بشكل مرن
+        clean_q = raw_input.lower().replace('^', '**').replace('√', 'sqrt')
+        
+        # استخراج المعادلات: يبحث عن أي شيء بعد الـ = 
+        eq_found = re.findall(r'[yx]\s*=\s*([^,]+)', clean_q)
+        # استخراج كافة الأرقام للفترات
+        nums = [float(n) for n in re.findall(r"[-+]?\d*\.\d+|\d+", clean_q)]
+        
+        if not eq_found:
+            st.error("لم يتم العثور على معادلات واضحة. يرجى كتابتها بصيغة y=... أو x=...")
+        else:
             x, y = sp.symbols('x y')
-            is_y_axis = 'y-axis' in clean_q
+            is_y_axis = 'y-axis' in clean_q or 'around y' in clean_q
             
-            # Identify Method (Disk vs Washer)
-            if len(equations) > 1:
-                method_type = "Washer Method"
-                f_expr = sp.sympify(equations[0][1].strip())
-                g_expr = sp.sympify(equations[1][1].strip())
-            else:
-                method_type = "Disk Method"
-                f_expr = sp.sympify(equations[0][1].strip())
-                g_expr = sp.sympify(0)
+            # تحديد الدوال (Disk vs Washer)
+            f_expr = sp.sympify(eq_found[0].strip())
+            g_expr = sp.sympify(eq_found[1].strip()) if len(eq_found) > 1 else sp.sympify(0)
             
-            st.success(f"✅ Identified Method: **{method_type}**")
+            method = "Washer Method" if g_expr != 0 else "Disk Method"
+            st.success(f"🔍 الطريقة المكتشفة: **{method}**")
 
-            # Limits Detection
-            if len(nums) >= 2:
-                a, b = float(nums[0]), float(nums[1])
-            else:
-                a, b = 0, 1 
+            # تحديد الفترات تلقائياً (تجنب خطأ index out of range)
+            a = nums[-2] if len(nums) >= 2 else 0
+            b = nums[-1] if len(nums) >= 1 else 1
             
+            # توحيد المتغيرات حسب محور الدوران
+            var = y if is_y_axis else x
+            # تحويل الدوال إذا كانت المسألة حول y-axis والدالة مكتوبة بدلالة x
             if is_y_axis and 'x' in str(f_expr):
                 f_expr = sp.solve(sp.Eq(y, f_expr), x)[0]
                 if g_expr != 0: g_expr = sp.solve(sp.Eq(y, g_expr), x)[0]
-                var = y
-            else:
-                var = x
 
-            # 2. Mathematical Steps
-            st.subheader("📝 Mathematical Solution")
+            # 2. الحل الرياضي
             col1, col2 = st.columns(2)
-            
             with col1:
+                st.subheader("📝 خطوات الحل")
                 integrand = sp.simplify(f_expr**2 - g_expr**2)
-                st.write(f"**1. Setup the Integral ({method_type}):**")
-                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} [({sp.latex(f_expr)})^2 - ({sp.latex(g_expr)})^2] \, d{var}")
+                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({sp.latex(integrand)}) \, d{var}")
                 
-                antideriv = sp.integrate(integrand, var)
-                st.write("**2. Anti-derivative:**")
-                st.latex(rf"V = \pi \left[ {sp.latex(antideriv)} \right]_{{{a}}}^{{{b}}}")
-                
-                final_val = sp.pi * (antideriv.subs(var, b) - antideriv.subs(var, a))
-                st.write("**3. Final Result:**")
-                st.latex(rf"V = {sp.latex(sp.simplify(final_val))} \approx {float(final_val.evalf()):.4f}")
+                res = sp.integrate(integrand, (var, a, b))
+                final_v = sp.pi * res
+                st.latex(rf"V = {sp.latex(sp.simplify(final_v))} \approx {float(final_v.evalf()):.4f}")
 
-            # 3. 3D Visualization (Fixed Line 88 Logic)
+            # 3. الرسم البياني 3D
             with col2:
-                st.subheader("📊 3D Model")
-                fig = plt.figure(figsize=(8, 6))
+                st.subheader("📊 المجسم الناتج")
+                fig = plt.figure()
                 ax = fig.add_subplot(111, projection='3d')
+                u = np.linspace(float(a), float(b), 40)
+                v = np.linspace(0, 2*np.pi, 40)
+                U, V = np.meshgrid(u, v)
                 
-                v_vals = np.linspace(float(a), float(b), 50)
-                theta = np.linspace(0, 2*np.pi, 50)
-                V_mesh, THETA_mesh = np.meshgrid(v_vals, theta)
+                f_num = sp.lambdify(var, f_expr, 'numpy')(U)
                 
-                r_num = sp.lambdify(var, f_expr, 'numpy')(V_mesh)
-                
-                # Correct Coordinate Mapping for Revolution
                 if is_y_axis:
-                    X_p = r_num * np.cos(THETA_mesh)
-                    Y_p = V_mesh
-                    Z_p = r_num * np.sin(THETA_mesh)
+                    X, Y, Z = f_num*np.cos(V), U, f_num*np.sin(V)
                 else:
-                    X_p = V_mesh
-                    Y_p = r_num * np.cos(THETA_mesh)
-                    Z_p = r_num * np.sin(THETA_mesh)
+                    X, Y, Z = U, f_num*np.cos(V), f_num*np.sin(V)
                 
-                ax.plot_surface(X_p, Y_p, Z_p, color='cyan', alpha=0.6, edgecolor='k', lw=0.1)
+                ax.plot_surface(X, Y, Z, alpha=0.7, color='cyan', edgecolor='navy')
                 st.pyplot(fig)
-                
-        except Exception as e:
-            st.error(f"Error: {e}. Check your equations.")
+
+    except Exception as e:
+        st.error(f"حدث خطأ في التحليل: {e}. حاولي كتابة المعادلات بوضوح مثل y = x**2")
