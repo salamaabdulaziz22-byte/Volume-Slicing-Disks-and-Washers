@@ -6,50 +6,60 @@ import re
 
 st.set_page_config(page_title="Smart Math Solver", layout="wide")
 st.title("🤖 Smart Volume Solver (Natural Language)")
-st.write("Paste your full question below, and I will extract the math!")
+st.write("Paste your math problem below (e.g., y = x^2, interval [1, 3])")
 
-# خانة السؤال الكامل
+# خانة السؤال
 question = st.text_area("Enter your question here:", 
     "Revolve the region under the curve y = sqrt(x) on the interval [0, 4] about the x-axis")
 
 if st.button("Analyze & Solve"):
+    x = sp.symbols('x')
     try:
-        # 1. استخراج الدالة باستخدام Regex
-        func_match = re.search(r'y\s*=\s*([^on\s]+)', question)
-        # 2. استخراج الفترة
-        interval_match = re.findall(r'(\d+\.?\d*)', question)
+        # 1. تنظيف النص وتبسيطه للبرنامج
+        clean_q = question.replace('Vx', 'sqrt(x)').replace('√x', 'sqrt(x)').replace('^', '**')
         
-        if func_match and len(interval_match) >= 2:
-            f_expr = func_match.group(1).replace('V', 'sqrt') # تحويل V لـ sqrt إذا كتبتِها هكذا
-            a_val = float(interval_match[-2])
-            b_val = float(interval_match[-1])
+        # 2. البحث عن الدوال (y=...)
+        functions = re.findall(r'y\s*=\s*([^\s,]+)', clean_q)
+        
+        # 3. البحث عن الفترة [a, b]
+        interval = re.findall(r'(\d+\.?\d*)', clean_q)
+
+        if functions and len(interval) >= 2:
+            f_expr = sp.sympify(functions[0])
+            g_expr = sp.sympify(functions[1]) if len(functions) > 1 else sp.sympify(0)
             
-            x = sp.symbols('x')
-            f = sp.sympify(f_expr)
+            a_val = float(interval[-2])
+            b_val = float(interval[-1])
             
-            # الحل
-            st.success(f"Extracted: f(x) = {f_expr}, Interval = [{a_val}, {b_val}]")
+            st.success(f"✅ Extracted: f(x)={f_expr}, Interval=[{a_val}, {b_val}]")
+            
+            # حساب التكامل
+            is_washer = g_expr != 0
+            integrand = f_expr**2 - g_expr**2
+            volume_expr = sp.pi * sp.integrate(integrand, (x, a_val, b_val))
             
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("📝 Steps")
-                integrand = f**2
-                formula = sp.pi * sp.Integral(integrand, (x, a_val, b_val))
-                st.latex(sp.latex(formula))
+                st.write("**Integral Setup:**")
+                st.latex(rf"\pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(integrand)}) \, dx")
                 
-                volume = sp.pi * sp.integrate(integrand, (x, a_val, b_val))
-                st.write("**Final Volume:**")
-                st.latex(f"V = {sp.latex(volume)} \approx {float(volume.evalf()):.4f}")
+                st.write("**Final Result:**")
+                st.latex(rf"V = {sp.latex(volume_expr)} \approx {float(volume_expr.evalf()):.4f}")
 
             with col2:
                 st.subheader("📊 Visualization")
                 x_vals = np.linspace(a_val, b_val, 100)
-                f_p = sp.lambdify(x, f, 'numpy')(x_vals)
+                # تحويل المعادلة لرقم ليقبلها الرسم
+                f_num = sp.lambdify(x, f_expr, 'numpy')(x_vals)
+                g_num = sp.lambdify(x, g_expr, 'numpy')(x_vals) if is_washer else np.zeros_like(x_vals)
+                
                 fig, ax = plt.subplots()
-                ax.plot(x_vals, f_p, color='red')
-                ax.fill_between(x_vals, f_p, color='orange', alpha=0.3)
+                ax.plot(x_vals, f_num, 'r', label='f(x)')
+                if is_washer: ax.plot(x_vals, g_num, 'b', label='g(x)')
+                ax.fill_between(x_vals, f_num, g_num, color='orange', alpha=0.3)
                 st.pyplot(fig)
         else:
-            st.warning("Could not clearly find the function or interval. Try to keep the format 'y = ...' and '[a, b]'")
+            st.error("Could not find a clear function (y=...) or interval [a, b]. Please check the format.")
     except Exception as e:
-        st.error(f"Error analyzing the question: {e}")
+        st.error(f"Error: {e}")
