@@ -27,7 +27,7 @@ if st.button("Analyze & Solve"):
             x, y = sp.symbols('x y')
             is_y_axis = 'y-axis' in clean_q
             
-            # --- تحديد الطريقة (Disk vs Washer) ---
+            # Identify Method (Disk vs Washer)
             if len(equations) > 1:
                 method_type = "Washer Method"
                 f_expr = sp.sympify(equations[0][1].strip())
@@ -37,7 +37,6 @@ if st.button("Analyze & Solve"):
                 f_expr = sp.sympify(equations[0][1].strip())
                 g_expr = sp.sympify(0)
             
-            # Show the identified method
             st.success(f"✅ Identified Method: **{method_type}**")
 
             # Limits Detection
@@ -70,7 +69,7 @@ if st.button("Analyze & Solve"):
                 st.write("**3. Final Result:**")
                 st.latex(rf"V = {sp.latex(sp.simplify(final_val))} \approx {float(final_val.evalf()):.4f}")
 
-            # 3. 3D Visualization
+            # 3. 3D Visualization (Fixed Line 88 Logic)
             with col2:
                 st.subheader("📊 3D Model")
                 fig = plt.figure(figsize=(8, 6))
@@ -82,7 +81,18 @@ if st.button("Analyze & Solve"):
                 
                 r_num = sp.lambdify(var, f_expr, 'numpy')(V_mesh)
                 
+                # Correct Coordinate Mapping for Revolution
                 if is_y_axis:
-                    X_p, Y_p, Z_p = r_num*np.cos(THETA_mesh), V_mesh, r_num*np.sin(THETA_mesh)
+                    X_p = r_num * np.cos(THETA_mesh)
+                    Y_p = V_mesh
+                    Z_p = r_num * np.sin(THETA_mesh)
                 else:
-                    X_p, Y_p, Z_p = V_mesh, r_num*np.
+                    X_p = V_mesh
+                    Y_p = r_num * np.cos(THETA_mesh)
+                    Z_p = r_num * np.sin(THETA_mesh)
+                
+                ax.plot_surface(X_p, Y_p, Z_p, color='cyan', alpha=0.6, edgecolor='k', lw=0.1)
+                st.pyplot(fig)
+                
+        except Exception as e:
+            st.error(f"Error: {e}. Check your equations.")
