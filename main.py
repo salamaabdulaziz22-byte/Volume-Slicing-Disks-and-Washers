@@ -12,7 +12,7 @@ st.markdown("Paste your problem below, and I will analyze, solve, and visualize 
 
 # User Input
 raw_input = st.text_area("Paste your calculus problem here:", height=150, 
-                         placeholder="e.g., y = 4 - x^2 and y = 1 from x = 0 to x = sqrt(3) about y-axis")
+                         placeholder=" ")
 
 def clean_math_string(s):
     """Converts common textbook shorthand to SymPy readable math."""
