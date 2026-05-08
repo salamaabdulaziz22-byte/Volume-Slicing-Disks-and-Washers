@@ -4,57 +4,62 @@ import numpy as np
 import matplotlib.pyplot as plt
 import re
 
-st.set_page_config(page_title="Math Master Solver", layout="wide")
-st.title("🎓 Advanced Volume of Revolution Solver")
+st.set_page_config(page_title="Ultimate Math Solver", layout="wide")
+st.title("Smart Calculus Solver")
 
+# خانة السؤال
 question = st.text_area("Paste your textbook question here:", 
-    "Find the volume... revolving y=4-x**2 and y=1 from x=0 to x=sqrt(3) about the y-axis")
+    "Example: y = 4 - x^2 and y = 1 from x = 0 to x = sqrt(3) about the y-axis")
 
-if st.button("Solve Step-by-Step"):
+if st.button("Solve & Generate Graph"):
+    x, y = sp.symbols('x y')
     try:
-        # 1. تنظيف النص وتحويله لصيغة رياضية
-        text = question.lower().replace('^', '**').replace('√', 'sqrt')
+        # 1. نظام "الترجمة الذكية" لتصحيح أخطاء النسخ (Copy-Paste)
+        # يحول الأسس والجذور والصيغ الشائعة لصيغة يفهمها البرنامج
+        clean_q = question.lower()
+        clean_q = clean_q.replace('√', 'sqrt').replace('vx', 'sqrt(x)')
+        clean_q = re.sub(r'([xy])(\d)', r'\1**\2', clean_q) # يحول x2 إلى x**2
+        clean_q = clean_q.replace('^', '**')
         
-        # 2. تحديد متغير التكامل (x أو y)
-        var = sp.Symbol('y') if 'y-axis' in text else sp.Symbol('x')
+        # 2. تحديد المتغير والاتجاه (x-axis vs y-axis)
+        var = y if 'y-axis' in clean_q else x
         
-        # 3. استخراج الدوال والفترات
-        # هذا الجزء مبرمج ليكون مرناً جداً مع طريقة كتابتك
-        eqs = re.findall(r'[xy]\s*=\s*([0-9\s\+\-\*\^/\(\)sqrt]+|[0-9x]+)', text)
-        nums = re.findall(r'(\d+\.?\d*)', text)
+        # 3. استخراج المعادلات
+        found_eqs = re.findall(r'[xy]\s*=\s*([0-9x\s\+\-\*\^/\(\)sqrt]+)', clean_q)
+        # استخراج الأرقام (الفترة)
+        nums = re.findall(r'(\d+\.?\d*)', clean_q)
         
-        if len(eqs) >= 1:
-            f = sp.sympify(eqs[0].strip().replace('x2', 'x**2'))
-            g = sp.sympify(eqs[1].strip()) if len(eqs) > 1 else sp.sympify(0)
+        if found_eqs:
+            f_expr = sp.sympify(found_eqs[0].strip())
+            g_expr = sp.sympify(found_eqs[1].strip()) if len(found_eqs) > 1 else sp.sympify(0)
             
-            # تحديد حدود التكامل (مثلاً من 0 إلى جذر 3)
-            # سنقوم بحسابها تلقائياً إذا وجدت في النص
+            # معالجة ذكية للجذور في الفترة (مثل sqrt(3))
             a_val = 0.0
             b_val = float(nums[-1]) if nums else 1.0
-            if 'sqrt(3)' in text: b_val = float(sp.sqrt(3).evalf())
+            if 'sqrt(3)' in clean_q: b_val = float(sp.sqrt(3).evalf())
 
-            # حساب التكامل للحجم
-            integrand = sp.simplify(f**2 - g**2)
+            # حساب التكامل
+            integrand = sp.simplify(f_expr**2 - g_expr**2)
             volume = sp.pi * sp.integrate(integrand, (var, a_val, b_val))
             
-            st.success(f"✅ Extracted: Integrating {f} along the {var}-axis")
+            st.success(f"✅ Extracted: f={f_expr}, g={g_expr} on [{a_val}, {b_val}]")
             
             col1, col2 = st.columns(2)
             with col1:
-                st.subheader("📝 Steps")
+                st.subheader("📝 Mathematical Solution")
                 st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(integrand)}) \, d{var}")
-                st.write("**Exact Result:**")
-                st.latex(rf"V = {sp.latex(volume)}")
-                st.info(f"Decimal Value: {float(volume.evalf()):.4f}")
+                st.write("**Final Volume:**")
+                st.latex(rf"V = {sp.latex(volume)} \approx {float(volume.evalf()):.4f}")
 
             with col2:
                 st.subheader("📊 Visualization")
-                # رسم توضيحي مبسط للمنطقة
                 t_vals = np.linspace(float(a_val), float(b_val), 100)
-                f_n = sp.lambdify(var, f, 'numpy')(t_vals)
+                f_n = sp.lambdify(var, f_expr, 'numpy')(t_vals)
                 fig, ax = plt.subplots()
-                ax.plot(t_vals, f_n, 'r')
-                ax.fill_between(t_vals, f_n, alpha=0.3)
+                ax.plot(t_vals, f_n, color='red', label='f(var)')
+                ax.fill_between(t_vals, f_n, alpha=0.2, color='orange')
                 st.pyplot(fig)
+        else:
+            st.error("Could not find equations. Try writing as 'y = ...'")
     except Exception as e:
-        st.error("Please ensure the equation is clear, e.g., y = 4 - x**2")
+        st.error(f"Analysis Error: {e}. Tip: Use '**' for power, e.g., x**2")
