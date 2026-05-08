@@ -3,12 +3,12 @@ import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Professional UI Setup
+# Professional Page Config
 st.set_page_config(page_title="Calculus Volume Solver Pro", layout="wide")
 st.title("Advanced Volume Analyzer")
 st.write("Verified solver for Disk & Washer methods (Lesson 6-2)")
 
-# Sidebar for precise inputs
+# Sidebar for precise user inputs
 with st.sidebar:
     st.header("Problem Parameters")
     f_input = st.text_input("Upper Function f(x):", "sqrt(x)")
@@ -17,55 +17,53 @@ with st.sidebar:
     
 if st.button("Generate Step-by-Step Solution"):
     try:
+        # 1. SETUP SYMBOLS
         x, y = sp.symbols('x y')
         f = sp.sympify(f_input)
         g = sp.sympify(g_input)
         
-        # 1. Automatic Boundary Detection (Intersections)
+        # 2. AUTOMATIC BOUNDARY DETECTION (Intersections)
         intersections = sp.solve(f - g, x)
         real_pts = [p.evalf() for p in intersections if p.is_real]
-        a_limit, b_limit = min(real_pts), max(real_pts)
-        
-        # 2. Axis Analysis
-        axis_type = 'y' if 'x' in axis_val else 'x'
-        axis_num = sp.sympify(axis_val.split('=')[1])
-        
-        # 3. Radius Logic (R and r) based on Axis Type
-        if axis_type == 'y':  # Vertical Rotation
-            # Transform functions to be in terms of y
-            f_inv = sp.solve(sp.Eq(y, f), x)[0]
-            g_inv = sp.solve(sp.Eq(y, g), x)[0]
+        if not real_pts:
+            st.error("No intersection found between these functions.")
+        else:
+            a_limit, b_limit = min(real_pts), max(real_pts)
             
-            # New boundaries in terms of y
-            a_y, b_y = f.subs(x, a_limit), f.subs(x, b_limit)
-            if a_y > b_y: a_y, b_y = b_y, a_y
+            # 3. AXIS ANALYSIS
+            axis_type = 'y' if 'x' in axis_val else 'x'
+            axis_num = sp.sympify(axis_val.split('=')[1])
             
-            R_radius = sp.Abs(f_inv - axis_num)
-            r_radius = sp.Abs(g_inv - axis_num)
-            var = y
-            limits = (a_y, b_y)
-        else:  # Horizontal Rotation
-            R_radius = sp.Abs(f - axis_num)
-            r_radius = sp.Abs(g - axis_num)
-            var = x
-            limits = (a_limit, b_limit)
+            # 4. RADIUS LOGIC (R and r)
+            if axis_type == 'y':  # Vertical Rotation (dy)
+                # Transform functions to be in terms of y
+                f_inv = sp.solve(sp.Eq(y, f), x)[0]
+                g_inv = sp.solve(sp.Eq(y, g), x)[0]
+                
+                # Update boundaries for y
+                y_a, y_b = float(f.subs(x, a_limit)), float(f.subs(x, b_limit))
+                limits = (min(y_a, y_b), max(y_a, y_b))
+                
+                R_radius = sp.Abs(f_inv - axis_num)
+                r_radius = sp.Abs(g_inv - axis_num)
+                var = y
+            else:  # Horizontal Rotation (dx)
+                R_radius = sp.Abs(f - axis_num)
+                r_radius = sp.Abs(g - axis_num)
+                var = x
+                limits = (float(a_limit), float(b_limit))
 
-        # 4. Integration Calculation
-        integrand = sp.simplify(R_outer**2 - r_inner**2) # Wait, using radius names
-        integrand = sp.simplify(R_radius**2 - r_radius**2)
-        volume_exact = sp.pi * sp.integrate(integrand, (var, limits[0], limits[1]))
-        
-        # 5. Output Results
-        st.success("✅ Solution Verified!")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("📝 Step-by-Step Methodology:")
-            st.write(f"**Integration Variable:** d{var}")
-            st.write(f"**Limits:** from {limits[0]} to {limits[1]}")
-            st.write("**Formula Applied:**")
-            st.latex(rf"V = \pi \int_{{{limits[0]}}}^{{{limits[1]}}} [({sp.latex(R_radius)})^2 - ({sp.latex(r_radius)})^2] \, d{var}")
+            # 5. INTEGRATION
+            integrand = sp.simplify(R_radius**2 - r_radius**2)
+            volume_exact = sp.pi * sp.integrate(integrand, (var, limits[0], limits[1]))
             
-            st.write("**Exact Value:**")
-            st.latex(rf"V = {sp.latex(sp.simplify(volume_exact))}")
-            st.write
+            # 6. UI OUTPUT
+            st.success("✅ Solution Verified!")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("📝 Step-by-Step Methodology:")
+                st.write(f"**Integration Variable:** d{var}")
+                st.write(f"**Limits:** from {limits[0]} to {limits[1]}")
+                st.write("**Formula Applied (Washer Method):**")
+                st.latex(rf"V = \pi
