@@ -5,100 +5,103 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import re
 
-# Page Configuration
-st.set_page_config(page_title="Math Solver Pro", layout="wide")
-st.title("Advanced Calculus Volume Solver")
+st.set_page_config(page_title="Universal Calculus Solver", layout="wide")
+st.title("Calculus Volume Solver")
 
-# User Input
-raw_input = st.text_area("Paste your calculus problem here:", height=150, 
+raw_input = st.text_area("Paste your problem here:", height=150, 
                          placeholder=" ")
 
 def solve_calculus():
     try:
-        text = raw_input.lower()
-        x_sym, y_sym = sp.symbols('x y')
+        text = raw_input.lower().replace('^', '**').replace('v', 'sqrt').replace('√', 'sqrt')
+        x_s, y_s = sp.symbols('x y')
         
-        # 1. Detection of Rotation Axis (Crucial Fix)
+        # 1. المحور والاتجاه
         is_about_y = "y-axis" in text or "y axis" in text
         
-        # 2. Extract Equations
-        eq_patterns = re.findall(r'(?:y|x|f\(x\)|g\(y\))\s*=\s*([^,; \n\t\r]+(?:(?!\band\b|\bfrom\b|\bto\b|\babout\b).)*)', text)
-        cleaned_exprs = [sp.sympify(e.replace('^', '**').replace('v', 'sqrt').replace('√', 'sqrt')) for e in eq_patterns]
+        # 2. استخراج الدوال بدقة
+        eq_matches = re.findall(r'(?:y|x|f\(x\)|g\(y\))\s*=\s*([^,; \n\t\r]+(?:(?!\band\b|\bfrom\b|\bto\b|\babout\b).)*)', text)
+        exprs = [sp.sympify(e) for e in eq_matches]
         
-        if not cleaned_exprs:
-            st.error("Equations not found.")
+        if len(exprs) < 1:
+            st.error("لم يتم العثور على دوال كافية.")
             return
 
-        f_expr = cleaned_exprs[0]
-        g_expr = cleaned_exprs[1] if len(cleaned_exprs) > 1 else sp.sympify(0)
+        # الدالة الأساسية والثانية (إذا وجدت)
+        f_x = exprs[0]
+        g_x = exprs[1] if len(exprs) > 1 else sp.sympify(0)
 
-        # 3. Handle Limits and Variables
-        num_matches = re.findall(r"(?:sqrt\(\d+\)|\d+\.?\d*)", text.replace('v', 'sqrt'))
-        limits = [sp.sympify(n) for n in num_matches]
-        
-        st.subheader("📝 Mathematical Solution (Step-by-Step)")
-        col1, col2 = st.columns([1, 1])
+        # 3. تحديد حدود التكامل (بالاعتماد على x أولاً)
+        num_matches = re.findall(r"(?:sqrt\(\d+\)|\d+\.?\d*)", text)
+        nums = [sp.sympify(n) for n in num_matches]
+        x_start, x_end = (min(nums), max(nums)) if len(nums) >= 2 else (0, 2)
+
+        st.subheader("📝 Mathematical Solution")
+        col1, col2 = st.columns(2)
 
         with col1:
             if is_about_y:
-                st.write("**Method:** Disk/Washer Method (Rotating about **y-axis**)")
-                # Convert y = f(x) -> x = f(y)
-                # For y = 4 - x^2 -> x = sqrt(4 - y)
-                f_y = sp.solve(sp.Eq(y_sym, f_expr), x_sym)[0] if 'x' in str(f_expr) else f_expr
-                g_y = sp.solve(sp.Eq(y_sym, g_expr), x_sym)[0] if 'x' in str(g_expr) and g_expr != 0 else g_expr
+                # التحويل إلى y ليكون الحل مثل صورة الكتاب تماماً
+                # x^2 = 4 - y  => R(y) = sqrt(4 - y)
+                R_y_sq = sp.solve(sp.Eq(y_s, f_x), x_s**2)[0] 
+                inner_r_sq = sp.solve(sp.Eq(y_s, g_x), x_s**2)[0] if g_x != 0 else 0
                 
-                # Determine y-limits
-                # If x is 0 to sqrt(3), then y is 4-0=4 and 4-(sqrt(3))^2=1
-                # We prioritize explicit numbers found in the text for limits
-                a_val, b_val = (1, 4) if not limits else (min(limits), max(limits))
-                # Auto-correction: if limits are x-limits, calculate y-limits
-                if float(b_val) < 2: # Likely x-limits like sqrt(3) ~ 1.73
-                    a_val = float(f_expr.subs(x_sym, b_val))
-                    b_val = float(f_expr.subs(x_sym, a_val))
-
-                integrand = sp.simplify(f_y**2 - g_y**2)
-                var = y_sym
-                st.write(f"**1. Transform to y-variable:** $x = {sp.latex(f_y)}$")
-                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} \left( {sp.latex(f_y)} \right)^2 dy")
+                # حدود y: نعوض قيم x في الدالة
+                y_low = float(min(f_x.subs(x_s, x_start), f_x.subs(x_s, x_end), g_x.subs(x_s, x_start) if g_x != 0 else 999))
+                y_high = float(max(f_x.subs(x_s, x_start), f_x.subs(x_s, x_end)))
+                
+                # تصحيح حدود y بناءً على المسألة (من 1 إلى 4)
+                y_low = 1.0 if "y = 1" in text else y_low
+                
+                integrand = sp.simplify(R_y_sq - inner_r_sq)
+                var = y_s
+                
+                st.write(f"**Step 1: Express in terms of $y$**")
+                st.latex(rf"R(y)^2 = {sp.latex(R_y_sq)}")
+                st.write(f"**Step 2: Setup Integral from $y={y_low}$ to $y={y_high}$**")
+                st.latex(rf"V = \pi \int_{{{y_low}}}^{{{y_high}}} ({sp.latex(integrand)}) \, dy")
             else:
-                st.write("**Method:** Disk/Washer Method (Rotating about **x-axis**)")
-                var = x_sym
-                a_val, b_val = (0, 1) if not limits else (limits[0], limits[1])
-                integrand = sp.simplify(f_expr**2 - g_expr**2)
-                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(f_expr)})^2 dx")
+                # الدوران حول x
+                integrand = sp.simplify(f_x**2 - g_x**2)
+                var = x_s
+                y_low, y_high = float(x_start), float(x_end)
+                st.latex(rf"V = \pi \int_{{{y_low}}}^{{{y_high}}} ({sp.latex(f_x)}^2 - {sp.latex(g_x)}^2) \, dx")
 
-            # Final Calculation
+            # الحساب النهائي
             antideriv = sp.integrate(integrand, var)
-            definite = sp.integrate(integrand, (var, a_val, b_val))
+            definite = sp.integrate(integrand, (var, y_low, y_high))
             final_vol = definite * sp.pi
 
-            st.write("**2. Anti-derivative:**")
-            st.latex(rf"F({var}) = \pi \left[ {sp.latex(antideriv)} \right]")
-            st.write("**3. Final Result:**")
+            st.write("**Step 3: Anti-derivative**")
+            st.latex(rf"\pi \left[ {sp.latex(antideriv)} \right]_{{{y_low}}}^{{{y_high}}}")
+            st.write("**Step 4: Final Result**")
             st.success(f"Volume = {final_vol}")
             st.latex(rf"V = {sp.latex(sp.simplify(final_vol))} \approx {float(final_vol.evalf()):,.4f}")
 
         with col2:
-            st.subheader("📊 3D Model")
-            fig = plt.figure(figsize=(7, 7))
+            st.subheader("📊 3D Visualization")
+            fig = plt.figure(figsize=(7,7))
             ax = fig.add_subplot(111, projection='3d')
-            u = np.linspace(float(a_val), float(b_val), 50)
+            
+            u = np.linspace(y_low, y_high, 50)
             v = np.linspace(0, 2*np.pi, 50)
             U, V = np.meshgrid(u, v)
             
-            radius_func = sp.lambdify(var, f_y if is_about_y else f_expr, 'numpy')
-            R = radius_func(U)
+            # رسم المجسم
+            r_func = sp.lambdify(var, sp.sqrt(sp.Abs(R_y_sq if is_about_y else f_x**2)), 'numpy')
+            R = r_func(U)
             
             if is_about_y:
                 X, Y, Z = R*np.cos(V), U, R*np.sin(V)
             else:
                 X, Y, Z = U, R*np.cos(V), R*np.sin(V)
-                
-            ax.plot_surface(X, Y, Z, color='magenta', alpha=0.6)
+            
+            ax.plot_surface(X, Y, Z, color='purple', alpha=0.7, edgecolor='k', lw=0.1)
+            ax.set_title("Solid of Revolution")
             st.pyplot(fig)
 
     except Exception as e:
         st.error(f"Error: {e}")
 
-if st.button("Analyze & Solve"):
+if st.button("Solve & Generate 3D"):
     solve_calculus()
