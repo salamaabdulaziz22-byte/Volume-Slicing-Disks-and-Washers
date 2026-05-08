@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import re
 
 st.set_page_config(page_title="Pro Volume Solver", layout="wide")
-st.title("🎓 Expert Volume of Revolution Solver")
+st.title("Expert Volume of Revolution Solver")
 st.markdown("---")
 
 # خانة السؤال
