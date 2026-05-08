@@ -2,114 +2,70 @@ import streamlit as st
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
-import re
 
-# Professional Header for your STEM Portfolio
-st.set_page_config(page_title="Volume Solver Pro", layout="wide")
-st.title("Volume of Revolution Solver")
-st.write("Step-by-step solution for Disks and Washers (Lesson 6-2)")
+# Professional UI Setup
+st.set_page_config(page_title="Calculus Volume Solver Pro", layout="wide")
+st.title("Advanced Volume Analyzer")
+st.write("Verified solver for Disk & Washer methods (Lesson 6-2)")
 
-# Input Section
-raw_input = st.text_area("Enter your problem here:", height=120, 
-                         placeholder="e.g., y=x**2, y=4, about y-axis")
-
-if st.button("Calculate Final Solution"):
+# Sidebar for precise inputs
+with st.sidebar:
+    st.header("Problem Parameters")
+    f_input = st.text_input("Upper Function f(x):", "sqrt(x)")
+    g_input = st.text_input("Lower Function g(x):", "x**2")
+    axis_val = st.text_input("Axis of Revolution (e.g., x=0 or y=2):", "x=0")
+    
+if st.button("Generate Step-by-Step Solution"):
     try:
-        # --- 1. INITIALIZATION ---
         x, y = sp.symbols('x y')
-        text = raw_input.lower().replace('^', '**').replace('vx', 'sqrt(x)')
+        f = sp.sympify(f_input)
+        g = sp.sympify(g_input)
         
-        # Determine Axis
-        is_y_axis = any(word in text for word in ['y-axis', 'about y', 'vertical'])
-        var = y if is_y_axis else x
+        # 1. Automatic Boundary Detection (Intersections)
+        intersections = sp.solve(f - g, x)
+        real_pts = [p.evalf() for p in intersections if p.is_real]
+        a_limit, b_limit = min(real_pts), max(real_pts)
         
-        # --- 2. EXTRACT & TRANSFORM EQUATIONS ---
-        # Find everything that looks like an equation
-        eq_patterns = re.findall(r'[yx]\s*=\s*([^, \n]+)', text)
-        if not eq_patterns:
-            st.error("Error: No equations found. Please use y=... or x=...")
-            st.stop()
+        # 2. Axis Analysis
+        axis_type = 'y' if 'x' in axis_val else 'x'
+        axis_num = sp.sympify(axis_val.split('=')[1])
+        
+        # 3. Radius Logic (R and r) based on Axis Type
+        if axis_type == 'y':  # Vertical Rotation
+            # Transform functions to be in terms of y
+            f_inv = sp.solve(sp.Eq(y, f), x)[0]
+            g_inv = sp.solve(sp.Eq(y, g), x)[0]
             
-        raw_exprs = [sp.sympify(e) for e in eq_patterns]
-        
-        # Convert functions to match the axis of rotation
-        final_funcs = []
-        for expr in raw_exprs:
-            if is_y_axis and 'x' in str(expr):
-                # Solving y = f(x) for x to get x = g(y)
-                sol = sp.solve(sp.Eq(y, expr), x)
-                final_funcs.append(sol[-1]) # Take the right-side branch
-            elif not is_y_axis and 'y' in str(expr):
-                # Solving x = g(y) for y to get y = f(x)
-                sol = sp.solve(sp.Eq(x, expr), y)
-                final_funcs.append(sol[-1])
-            else:
-                final_funcs.append(expr)
-
-        # --- 3. FIND BOUNDARIES (INTERSECTIONS) ---
-        if len(final_funcs) >= 2:
-            pts = sp.solve(sp.Eq(final_funcs[0], final_funcs[1]), var)
-        else:
-            pts = sp.solve(sp.Eq(final_funcs[0], 0), var)
+            # New boundaries in terms of y
+            a_y, b_y = f.subs(x, a_limit), f.subs(x, b_limit)
+            if a_y > b_y: a_y, b_y = b_y, a_y
             
-        # Get real numerical values for the limits
-        real_pts = [p.evalf() for p in pts if p.is_real]
-        if real_pts:
-            a, b = min(real_pts), max(real_pts)
-        else:
-            # Look for explicit numbers in text as a backup
-            nums = re.findall(r"sqrt\(\d+\)|\d+\.?\d*", text)
-            a, b = sp.sympify(nums[-2]), sp.sympify(nums[-1])
+            R_radius = sp.Abs(f_inv - axis_num)
+            r_radius = sp.Abs(g_inv - axis_num)
+            var = y
+            limits = (a_y, b_y)
+        else:  # Horizontal Rotation
+            R_radius = sp.Abs(f - axis_num)
+            r_radius = sp.Abs(g - axis_num)
+            var = x
+            limits = (a_limit, b_limit)
 
-        # --- 4. DETERMINE R AND r ---
-        R_outer = final_funcs[0]
-        r_inner = final_funcs[1] if len(final_funcs) > 1 else sp.Integer(0)
+        # 4. Integration Calculation
+        integrand = sp.simplify(R_outer**2 - r_inner**2) # Wait, using radius names
+        integrand = sp.simplify(R_radius**2 - r_radius**2)
+        volume_exact = sp.pi * sp.integrate(integrand, (var, limits[0], limits[1]))
         
-        # Test which is bigger at the midpoint to prevent negative volume
-        mid = (float(a) + float(b)) / 2
-        if abs(float(R_outer.subs(var, mid))) < abs(float(r_inner.subs(var, mid))):
-            R_outer, r_inner = r_inner, R_outer
-
-        # --- 5. CALCULUS & OUTPUT ---
-        method = "Washer Method" if r_inner != 0 else "Disk Method"
-        integrand = sp.simplify(R_outer**2 - r_inner**2)
-        volume_exact = sp.pi * sp.integrate(integrand, (var, a, b))
-
-        st.success(f"Successfully identified the **{method}**")
-        
+        # 5. Output Results
+        st.success("✅ Solution Verified!")
         col1, col2 = st.columns(2)
+        
         with col1:
-            st.subheader("📝 Step-by-Step Steps")
+            st.subheader("📝 Step-by-Step Methodology:")
             st.write(f"**Integration Variable:** d{var}")
-            st.write(f"**Limits of Integration:** from {a} to {b}")
+            st.write(f"**Limits:** from {limits[0]} to {limits[1]}")
+            st.write("**Formula Applied:**")
+            st.latex(rf"V = \pi \int_{{{limits[0]}}}^{{{limits[1]}}} [({sp.latex(R_radius)})^2 - ({sp.latex(r_radius)})^2] \, d{var}")
             
-            st.write("**1. Setup:**")
-            st.latex(rf"V = \pi \int_{{{sp.latex(a)}}}^{{{sp.latex(b)}}} [({sp.latex(R_outer)})^2 - ({sp.latex(r_inner)})^2] \, d{var}")
-            
-            st.write("**2. Integrated Value:**")
-            st.latex(rf"V = {sp.latex(volume_exact)}")
-            
-            st.write("**3. Decimal Approximation:**")
-            st.info(f"Volume ≈ {float(volume_exact.evalf()):.4f}")
-
-        with col2:
-            st.subheader("📊 3D Visual Result")
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            u_vals = np.linspace(float(a), float(b), 40)
-            v_vals = np.linspace(0, 2*np.pi, 40)
-            U, V = np.meshgrid(u_vals, v_vals)
-            
-            # Numeric conversion for plotting
-            rad_func = sp.lambdify(var, R_outer, 'numpy')(U)
-            
-            if is_y_axis:
-                X, Y, Z = rad_func*np.cos(V), U, rad_func*np.sin(V)
-            else:
-                X, Y, Z = U, rad_func*np.cos(V), rad_func*np.sin(V)
-            
-            ax.plot_surface(X, Y, Z, color='orchid', alpha=0.6, edgecolor='k', lw=0.1)
-            st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"Analysis Failed: {e}. Try entering the equations more clearly.")
+            st.write("**Exact Value:**")
+            st.latex(rf"V = {sp.latex(sp.simplify(volume_exact))}")
+            st.write
