@@ -12,121 +12,130 @@ st.markdown("Paste your problem below, and I will analyze, solve, and visualize 
 
 # User Input
 raw_input = st.text_area("Paste your calculus problem here:", height=150, 
-                         placeholder="e.g., y = sqrt(x), from x = 0 to 4 about x-axis")
+                         placeholder="e.g., y = 4 - x^2 and y = 1 from x = 0 to x = sqrt(3) about y-axis")
 
-def clean_expression(expr_str):
-    """Clean the extracted string to make it SymPy compatible."""
-    # Handle 'Vx' or 'vx' as sqrt(x)
-    expr_str = re.sub(r'[vV][xX]', 'sqrt(x)', expr_str)
-    # Basic cleanup
-    expr_str = expr_str.replace('^', '**').replace('√', 'sqrt')
-    # Remove common words that might get caught in the regex
-    stop_words = ['on', 'the', 'interval', 'between', 'from', 'to', 'about']
-    for word in stop_words:
-        expr_str = re.sub(rf'\b{word}\b', '', expr_str)
-    return expr_str.strip()
+def clean_math_string(s):
+    """Converts common textbook shorthand to SymPy readable math."""
+    s = s.lower()
+    # Replace V3 with sqrt(3), Vx with sqrt(x)
+    s = re.sub(r'[vV](\d+)', r'sqrt(\1)', s)
+    s = re.sub(r'[vV][xX]', 'sqrt(x)', s)
+    s = s.replace('^', '**').replace('√', 'sqrt')
+    return s
 
 def solve_calculus():
     try:
-        # 1. Text Pre-processing
         text = raw_input.lower()
         x_sym, y_sym = sp.symbols('x y')
         
-        # Extract numbers (limits)
-        numbers = [float(n) for n in re.findall(r"[-+]?\d*\.\d+|\d+", text)]
-        
-        # Identify Problem Type
+        # 1. Identify Rotation Axis
         is_about_y = "about y-axis" in text or "about the y axis" in text
-        is_pyramid = "pyramid" in text
         
+        # 2. Extract Equations (Split by 'and', 'from', or commas)
+        # This regex looks for y=... or x=... patterns
+        raw_equations = re.findall(r'(?:y|f\(x\)|x|g\(y\))\s*=\s*([^,; \n\t\r]+(?:(?!\band\b|\bfrom\b|\bto\b|\babout\b).)*)', text)
+        
+        cleaned_exprs = []
+        for eq in raw_equations:
+            clean_eq = clean_math_string(eq)
+            try:
+                cleaned_exprs.append(sp.sympify(clean_eq))
+            except:
+                continue
+
+        if not cleaned_exprs:
+            st.error("Could not parse equations. Try writing them as y = 4 - x**2.")
+            return
+
+        # Assign f(x) and g(x)
+        f_expr = cleaned_exprs[0]
+        g_expr = cleaned_exprs[1] if len(cleaned_exprs) > 1 else sp.sympify(0)
+
+        # 3. Extract Limits (Numbers or sqrt expressions)
+        # We look for numbers or patterns like sqrt(3)
+        limit_matches = re.findall(r"(?:sqrt\(\d+\)|\d+\.?\d*)", clean_math_string(text))
+        nums = [sp.sympify(n) for n in limit_matches]
+        
+        # Usually, the first two numbers found after 'from' or 'x=' are the limits
+        a = nums[-2] if len(nums) >= 2 else 0
+        b = nums[-1] if len(nums) >= 2 else 1
+
         st.subheader("📝 Mathematical Solution (Step-by-Step)")
         col1, col2 = st.columns([1, 1])
 
         with col1:
-            if is_pyramid:
-                # Pyramid Logic (Example 2.1)
-                side = max(numbers) if numbers else 180
-                height = min([n for n in numbers if n != side and n != 0] + [100])
+            if is_about_y:
+                st.write("**Method:** Washer Method (Rotating about y-axis)")
+                var = y_sym
+                # If equations are in terms of x, solve for x
+                f_in_y = sp.solve(sp.Eq(y_sym, f_expr), x_sym)[0] if 'x' in str(f_expr) else f_expr
+                g_in_y = sp.solve(sp.Eq(y_sym, g_expr), x_sym)[0] if 'x' in str(g_expr) and g_expr != 0 else g_expr
                 
-                st.write("**1. Define the Side Length Function:**")
-                f_x = (side/height) * (height - x_sym)
-                st.latex(rf"f(x) = {sp.latex(f_x)}")
+                # Note: In Example 2.5, boundaries are often given in y. 
+                # If the user says from x=0 to x=V3, we might need the y-limits
+                # Let's calculate y-limits based on the functions if they aren't clear
+                y_start = float(min(f_expr.subs(x_sym, float(a)), f_expr.subs(x_sym, float(b))))
+                y_end = float(max(f_expr.subs(x_sym, float(a)), f_expr.subs(x_sym, float(b))))
                 
-                a, b = 0, height
-                integrand = f_x**2
-                var = x_sym
-                final_multiplier = 1 
+                # Check if user provided y-limits directly
+                limit_a, limit_b = float(a), float(b) 
+                # (Logic adjustment for Example 2.5: y goes from 1 to 4)
+                if limit_a == 0: # Common for x-limits, but we need y-limits
+                    limit_a, limit_b = y_start, y_end
+
+                integrand = sp.simplify(f_in_y**2 - g_in_y**2)
+                st.write("**1. Setup Integral (in terms of y):**")
+                st.latex(rf"V = \pi \int_{{{limit_a}}}^{{{limit_b}}} \left( {sp.latex(f_in_y)} \right)^2 - \left( {sp.latex(g_in_y)} \right)^2 \, dy")
             else:
-                # Disk/Washer Method Logic
-                # Improved Regex: Look for y=... or x=... and stop at comma or common words
-                func_matches = re.findall(r"(?:y|x|f\(x\)|g\(y\))\s*=\s*([^,; \n]+(?:(?!\bon\b|\bthe\b|\binterval\b).)*)", text)
-                
-                if not func_matches:
-                    st.error("Could not find an equation (e.g., y = ...).")
-                    return
-
-                # Clean the first expression found
-                expr_cleaned = clean_expression(func_matches[0])
-                f_expr = sp.sympify(expr_cleaned)
-                g_expr = sp.sympify(0) # Default second function
-                
-                # Determine Limits
-                a = min(numbers) if len(numbers) >= 2 else 0
-                b = max(numbers) if len(numbers) >= 2 else 1
-                
-                if is_about_y:
-                    st.write("**Type:** Rotation about the **y-axis**")
-                    var = y_sym
-                    if 'x' in str(f_expr):
-                        # Solve y = f(x) for x to get x = g(y)
-                        f_expr = sp.solve(sp.Eq(y_sym, f_expr), x_sym)[0]
-                else:
-                    st.write("**Type:** Rotation about the **x-axis**")
-                    var = x_sym
-
+                st.write("**Method:** Disk/Washer Method (Rotating about x-axis)")
+                var = x_sym
+                limit_a, limit_b = float(a), float(b)
                 integrand = sp.simplify(f_expr**2 - g_expr**2)
-                final_multiplier = sp.pi
-                
-                st.write("**1. Setup the Integral:**")
-                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left( {sp.latex(f_expr)} \right)^2 d{var}")
+                st.write("**1. Setup Integral:**")
+                st.latex(rf"V = \pi \int_{{{limit_a}}}^{{{limit_b}}} ({sp.latex(f_expr)})^2 - ({sp.latex(g_expr)})^2 \, dx")
 
-            # Calculations
+            # Integration steps
             antideriv = sp.integrate(integrand, var)
-            definite_val = sp.integrate(integrand, (var, a, b))
-            final_vol = definite_val * final_multiplier
-            
+            definite = sp.integrate(integrand, (var, limit_a, limit_b))
+            final_vol = definite * sp.pi
+
             st.write("**2. Anti-derivative:**")
-            st.latex(rf"F({var}) = {sp.latex(antideriv)}")
+            st.latex(rf"F({var}) = \pi \left( {sp.latex(antideriv)} \right)")
             
-            st.write("**3. Evaluate and Result:**")
+            st.write("**3. Final Result:**")
+            st.success(f"Volume Calculated")
             st.latex(rf"V = {sp.latex(sp.simplify(final_vol))} \approx {float(final_vol.evalf()):,.4f}")
 
-        # 3. 3D Visualization
+        # 4. 3D Visualization
         with col2:
             st.subheader("📊 3D Model")
             fig = plt.figure(figsize=(8, 8))
             ax = fig.add_subplot(111, projection='3d')
             
-            u_vals = np.linspace(float(a), float(b), 50)
-            v_vals = np.linspace(0, 2*np.pi, 50)
-            U, V = np.meshgrid(u_vals, v_vals)
+            u = np.linspace(float(limit_a), float(limit_b), 50)
+            v = np.linspace(0, 2*np.pi, 50)
+            U, V = np.meshgrid(u, v)
             
-            f_num = sp.lambdify(var, f_expr if not is_pyramid else sp.sqrt(integrand), 'numpy')
-            R = f_num(U)
+            # Radii for outer and inner surfaces
+            r_outer = sp.lambdify(var, f_in_y if is_about_y else f_expr, 'numpy')(U)
+            r_inner = sp.lambdify(var, g_in_y if is_about_y else g_expr, 'numpy')(U)
             
-            if is_about_y or is_pyramid:
-                X_p, Y_p, Z_p = R*np.cos(V), U, R*np.sin(V)
+            if is_about_y:
+                X_o, Y_o, Z_o = r_outer*np.cos(V), U, r_outer*np.sin(V)
+                X_i, Y_i, Z_i = r_inner*np.cos(V), U, r_inner*np.sin(V)
             else:
-                X_p, Y_p, Z_p = U, R*np.cos(V), R*np.sin(V)
-                
-            ax.plot_surface(X_p, Y_p, Z_p, cmap='winter', alpha=0.7)
+                X_o, Y_o, Z_o = U, r_outer*np.cos(V), r_outer*np.sin(V)
+                X_i, Y_i, Z_i = U, r_inner*np.cos(V), r_inner*np.sin(V)
+
+            ax.plot_surface(X_o, Y_o, Z_o, color='cyan', alpha=0.6, label='Outer')
+            if g_expr != 0:
+                ax.plot_surface(X_i, Y_i, Z_i, color='red', alpha=0.3, label='Inner')
+            
             st.pyplot(fig)
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error analyzing: {e}")
 
 if st.button("Analyze & Solve"):
     if raw_input.strip():
         solve_calculus()
-    else:
-        st.warning("Please enter a question.")
