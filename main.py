@@ -14,7 +14,7 @@ st.sidebar.header("Input Parameters")
 f_input = st.sidebar.text_input("Outer Function f(x)", "sqrt(x)")
 g_input = st.sidebar.text_input("Inner Function g(x) (0 for Disk)", "0")
 a_val = st.sidebar.number_input("Lower Limit (a)", value=0.0)
-b_val = st.sidebar.number_input("Upper Limit (b)", value=4.0)
+b_val = st.sidebar.number_input("Upper Limit (b)", value=0.0)
 
 if st.button("Solve & Generate Steps"):
     try:
