@@ -1,73 +1,85 @@
 import streamlit as st
-import numpy as np
+import google.generativeai as genai
 import matplotlib.pyplot as plt
+import numpy as np
 from sympy import symbols, pi, integrate, lambdify, sympify, solve
+import re
+
+# 1. Setup API Key (Get one for free at aistudio.google.com)
+GOOGLE_API_KEY = "YOUR_API_KEY_HERE"
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+def parse_question_with_ai(question_text):
+    """Uses AI to extract f(x), g(x), and bounds from raw text."""
+    prompt = f"""
+    Extract the mathematical components for a volume of revolution problem:
+    Question: "{question_text}"
+    Return ONLY a python dictionary like this:
+    {{"f": "outer_function", "g": "inner_function_or_0", "a": start_bound, "b": end_bound}}
+    Use python syntax (e.g., x**2, sqrt(x)).
+    """
+    response = model.generate_content(prompt)
+    return eval(response.text.strip())
 
 def main():
-    st.title("Volume Solver: Disks & Washers")
-    st.write("Enter your functions and bounds to calculate the volume of a solid of revolution.")
+    st.title("Smart Volume Solver")
+    st.write("Paste your full question below (e.g., 'Find the volume of the region bounded by y=x and y=x^2 rotated around the x-axis from 0 to 1')")
 
-    # User Inputs
-    col1, col2 = st.columns(2)
-    with col1:
-        f_input = st.text_input("Enter f(x) (Outer Radius)", "x**2")
-        g_input = st.text_input("Enter g(x) (Inner Radius - leave 0 for Disk)", "0")
-    with col2:
-        a = st.number_input("Lower Bound (a)", value=0.0)
-        b = st.number_input("Upper Bound (b)", value=1.0)
+    user_query = st.text_area("Enter the question text:")
 
-    if st.button("Solve"):
-        try:
-            x = symbols('x')
-            f = sympify(f_input)
-            g = sympify(g_input)
+    if st.button("Solve Everything"):
+        if not user_query:
+            st.warning("Please enter a question first.")
+            return
 
-            # Determine Method [cite: 1, 29]
-            method = "Disk Method" if g == 0 else "Washer Method"
-            st.subheader(f"Method: {method}")
+        with st.spinner("Analyzing question..."):
+            data = parse_question_with_ai(user_query)
+            f_str, g_str = data['f'], data['g']
+            a, b = float(data['a']), float(data['b'])
 
-            # Formula and Setup [cite: 10, 294]
-            if g == 0:
-                integrand = pi * f**2
-                formula_latex = r"V = \pi \int_{a}^{b} [f(x)]^2 dx"
-            else:
-                integrand = pi * (f**2 - g**2)
-                formula_latex = r"V = \pi \int_{a}^{b} ([f(x)]^2 - [g(x)]^2) dx"
+        # Logic for Disk vs Washer
+        x = symbols('x')
+        f_sym = sympify(f_str)
+        g_sym = sympify(g_str)
+        method = "Washer Method" if g_sym != 0 else "Disk Method"
 
-            st.latex(formula_latex)
+        # --- Display Results ---
+        st.header(f"Detected Method: {method}")
+        st.info(f"Functions identified: f(x) = {f_str}, g(x) = {g_str} on interval [{a}, {b}]")
 
-            # Step-by-Step Solving 
-            st.write("**Step 1: Setup the Integral**")
-            st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({integrand/pi}) dx")
+        # Step 1: Integral Setup
+        st.subheader("Step 1: Setup")
+        integrand = pi * (f_sym**2 - g_sym**2)
+        st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left( ({f_str})^2 - ({g_str})^2 \right) dx")
 
-            antiderivative = integrate(integrand, x)
-            result = integrate(integrand, (x, a, b))
+        # Step 2: Integration
+        st.subheader("Step 2: Integration Steps")
+        antiderivative = integrate(integrand, x)
+        result = integrate(integrand, (x, a, b))
+        
+        st.write("The antiderivative is:")
+        st.latex(rf"\pi \left[ {antiderivative/pi} \right]")
 
-            st.write("**Step 2: Find the Antiderivative**")
-            st.latex(rf"\pi \left[ {antiderivative/pi} \right]")
+        # Step 3: Result
+        st.subheader("Step 3: Final Answer")
+        st.success(rf"Final Volume: {result} \approx {result.evalf():.4f}")
 
-            st.write("**Step 3: Final Result**")
-            st.success(f"The Volume is: {result.evalf():.4f} cubic units")
-            st.latex(rf"V = {result} \approx {result.evalf():.4f}")
+        # --- Graphing ---
+        st.subheader("Visual Representation")
+        x_plot = np.linspace(a, b, 100)
+        f_func = lambdify(x, f_sym, 'numpy')
+        g_func = lambdify(x, g_sym, 'numpy')
 
-            # Graphing the Region [cite: 9]
-            st.write("**Visualising the Region:**")
-            x_vals = np.linspace(float(a), float(b), 100)
-            f_num = lambdify(x, f, 'numpy')(x_vals)
-            g_num = lambdify(x, g, 'numpy')(x_vals) if g != 0 else np.zeros_like(x_vals)
-
-            fig, ax = plt.subplots()
-            ax.plot(x_vals, f_num, label=f'f(x)={f_input}', color='blue')
-            if g != 0:
-                ax.plot(x_vals, g_num, label=f'g(x)={g_input}', color='red')
-            
-            ax.fill_between(x_vals, f_num, g_num, color='gray', alpha=0.3, label='Area to Rotate')
-            ax.axhline(0, color='black', linewidth=1)
-            ax.legend()
-            st.pyplot(fig)
-
-        except Exception as e:
-            st.error(f"Error: {e}. Please ensure your math syntax is correct (e.g., use 'x**2' for x²).")
+        fig, ax = plt.subplots()
+        ax.plot(x_plot, f_func(x_plot), label=f"f(x)={f_str}")
+        if g_sym != 0:
+            ax.plot(x_plot, g_func(x_plot), label=f"g(x)={g_str}")
+        
+        ax.fill_between(x_plot, f_func(x_plot), g_func(x_plot), color='cyan', alpha=0.3)
+        ax.set_title("Region to be Rotated")
+        ax.legend()
+        st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
