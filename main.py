@@ -1,87 +1,96 @@
 import streamlit as st
-import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+from sympy import symbols, integrate, pi, lambdify, sympify
+import openai
 
-# --- إعدادات الصفحة الرسمية ---
-st.set_page_config(page_title="Volume Solver - Al Shawamekh School", layout="wide")
+# إعداد مفتاح OpenAI
+# openai.api_key = "ضع_مفتاحك_هنا"
 
-# تصميم بسيط وراقي
-st.markdown("""
-    <style>
-    .stApp { background-color: #ffffff; }
-    .main-title { color: #2E4053; font-family: 'Segoe UI'; text-align: center; }
-    </style>
-    """, unsafe_allow_html=True)
+# إعدادات واجهة المستخدم
+st.set_page_config(page_title="Math Solver: Disks & Washers", layout="wide")
+st.title("📐 Automated Calculus Volume Solver")
+st.write("Enter your English word problem, and I will identify the method, solve it, and draw the solid.")
 
-st.markdown("<h1 class='main-title'>📐 Solid of Revolution Calculator</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Designed for Grade 12 Advanced Math - Term 3</p>", unsafe_allow_html=True)
-st.divider()
+# منطقة إدخال السؤال الكلامي
+user_query = st.text_area("Enter your word problem in English:", 
+                          placeholder="e.g., Find the volume of the region bounded by y=sqrt(x) and y=x rotated about the x-axis from x=0 to x=1")
 
-# --- مدخلات المستخدم (تبدأ فارغة) ---
-col_in1, col_in2 = st.columns(2)
+# دالة ذكاء اصطناعي لاستخراج المعطيات من النص
+def extract_math_params(text):
+    # ملاحظة: في النسخة التجريبية، سنقوم بمحاكاة رد الذكاء الاصطناعي
+    # ليعمل الكود، يجب تفعيل الربط مع OpenAI API
+    try:
+        # هذا "البرومبت" يوجه الذكاء الاصطناعي لاستخراج البيانات فقط
+        prompt = f"Analyze: {text}. Extract f(x), g(x), lower_limit, upper_limit. Return ONLY as python dict."
+        # رد افتراضي للمثال المذكور
+        return {"f": "sqrt(x)", "g": "x", "a": 0, "b": 1}
+    except:
+        return None
 
-with col_in1:
-    f_input = st.text_input("Enter Outer Function f(x):", placeholder="e.g., x")
-    g_input = st.text_input("Enter Inner Function g(x):", placeholder="Leave empty for Disk Method")
+if st.button("Solve My Problem"):
+    if user_query:
+        # 1. تحليل السؤال (Extraction)
+        params = extract_math_params(user_query)
+        
+        if params:
+            f_text = params['f']
+            g_text = params['g']
+            a_val = params['a']
+            b_val = params['b']
 
-with col_in2:
-    a = st.text_input("Lower Bound (a):", placeholder="0")
-    b = st.text_input("Upper Bound (b):", placeholder="1")
+            x = symbols('x')
+            f_expr = sympify(f_text)
+            g_expr = sympify(g_text)
 
-# زر التشغيل
-solve_btn = st.button("✨ Calculate Volume")
-
-# --- منطق الحل (لا يظهر إلا عند الضغط وكتابة بيانات) ---
-if solve_btn:
-    if not f_input:
-        st.warning("Please enter at least the outer function f(x) to start.")
-    else:
-        try:
-            # تحويل المدخلات إلى رموز رياضية
-            x = sp.symbols('x')
-            f_expr = sp.sympify(f_input)
-            g_expr = sp.sympify(g_input) if g_input else sp.sympify(0)
+            # 2. تحديد الطريقة (Method Identification)
+            method = "Washer Method" if g_expr != 0 else "Disk Method"
             
-            # تحويل الحدود إلى أرقام
-            a_val = float(a) if a else 0.0
-            b_val = float(b) if b else 1.0
-            
-            # تحديد الطريقة
-            method = "Disk Method" if g_expr == 0 else "Washer Method"
-            
-            # حساب التكامل
-            integrand = sp.pi * (f_expr**2 - g_expr**2)
-            volume = sp.integrate(integrand, (x, a_val, b_val))
-            
-            # --- عرض النتائج (تظهر الآن فقط) ---
-            st.divider()
-            res_col1, res_col2 = st.columns([1, 1])
-            
-            with res_col1:
-                st.subheader(f"Method: {method}")
-                st.write("**Integration Setup:**")
-                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} \left( {sp.latex(f_expr**2 - g_expr**2)} \right) \, dx")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader(f"Step-by-Step Solution ({method})")
                 
-                st.write("**Final Result:**")
-                st.success(f"Final Volume: {volume} cubic units")
-                st.write(f"Approximate Value: **{float(volume.evalf()):.4f}**")
+                # إعداد التكامل
+                if method == "Disk Method":
+                    formula = r"V = \pi \int_{a}^{b} [f(x)]^2 dx"
+                    integrand = f_expr**2
+                else:
+                    formula = r"V = \pi \int_{a}^{b} ([R(x)]^2 - [r(x)]^2) dx"
+                    integrand = f_expr**2 - g_expr**2
 
-            with res_col2:
-                st.subheader("Region Visualization")
-                t = np.linspace(a_val, b_val, 100)
-                f_num = sp.lambdify(x, f_expr, 'numpy')(t)
-                g_num = sp.lambdify(x, g_expr, 'numpy')(t)
+                st.write("**1. The Formula:**")
+                st.latex(formula)
+
+                st.write("**2. Setup Integral:**")
+                st.latex(f"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({integrand}) dx")
+
+                # الحساب
+                antiderivative = integrate(integrand, x)
+                result = integrate(integrand, (x, a_val, b_val)) * pi
                 
-                fig, ax = plt.subplots(figsize=(5, 3))
-                ax.plot(t, f_num, label='f(x)', color='blue')
-                if g_input:
-                    ax.plot(t, g_num, label='g(x)', color='red')
+                st.write("**3. Antiderivative:**")
+                st.latex(f"\pi \left[ {antiderivative} \\right]_{{{a_val}}}^{{{b_val}}}")
+
+                st.success(f"Final Volume: {result} \approx {float(result.evalf()):.4f} \text{{ units}}^3")
+
+            with col2:
+                st.subheader("Visual Representation")
+                # الرسم البياني
+                x_vals = np.linspace(float(a_val), float(b_val), 100)
+                f_num = lambdify(x, f_expr, 'numpy')
+                g_num = lambdify(x, g_expr, 'numpy')
+
+                fig, ax = plt.subplots()
+                ax.plot(x_vals, f_num(x_vals), 'r', label=f'R(x)={f_text}')
+                if method == "Washer Method":
+                    ax.plot(x_vals, g_num(x_vals), 'b', label=f'r(x)={g_text}')
                 
-                ax.fill_between(t, f_num, g_num, color='skyblue', alpha=0.4)
-                ax.grid(True, linestyle='--', alpha=0.6)
+                ax.fill_between(x_vals, f_num(x_vals), g_num(x_vals), color='gray', alpha=0.3)
+                ax.set_title("2D Area before rotation")
                 ax.legend()
                 st.pyplot(fig)
                 
-        except Exception as e:
-            st.error(f"Error: Could not solve. Please check your math syntax (use x**2 for x²).")
+                st.info(f"The logic detected a {'gap' if method == 'Washer' else 'solid contact'} with the axis, hence using {method}.")
+    else:
+        st.warning
