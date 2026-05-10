@@ -1,84 +1,112 @@
 import streamlit as st
+import sympy as sp
 import numpy as np
 import plotly.graph_objects as go
-from sympy import symbols, integrate, pi, lambdify, sympify
-import re
 
-# 1. إعداد الصفحة
-st.set_page_config(page_title="Professional 3D Calculus Solver", layout="wide")
+# Page Configuration
+st.set_page_config(page_title="Volume of Revolution Calc", layout="wide")
 
-st.title("📐 3D Solid of Revolution Solver")
-st.markdown("---")
+st.title("📐 Solids of Revolution: Disks & Washers")
+st.write("Calculate volumes with step-by-step solutions and interactive 3D visualizations.")
 
-# 2. منطقة إدخال السؤال كاملاً
-st.subheader("Step 1: Enter your Word Problem")
-full_question = st.text_area("Paste the full question from your worksheet:", 
-                            height=100, 
-                            placeholder="e.g., Find the volume of the region bounded by y=sqrt(x) and y=x from x=0 to x=1 about the x-axis.")
-
-# دالة ذكية لاستخراج المعطيات (لتجنب الأخطاء البرمجية)
-def extract_parameters(text):
-    text = text.lower().replace('^', '**')
-    # البحث عن الدوال y=...
-    funcs = re.findall(r'y\s*=\s*([a-z0-9\*\+\-\/\(\)\s\.]+)(?=\s|from|bound|,|$)', text)
-    # البحث عن الأرقام (الحدود)
-    nums = re.findall(r'[-+]?\d*\.\d+|\d+', text)
+# Sidebar for User Input
+with st.sidebar:
+    st.header("Input Parameters")
+    method = st.selectbox("Select Method:", ["Disk Method", "Washer Method"])
     
-    f_str = funcs[0].strip() if len(funcs) > 0 else "x"
-    g_str = funcs[1].strip() if len(funcs) > 1 else "0"
-    a = float(nums[-2]) if len(nums) >= 2 else 0.0
-    b = float(nums[-1]) if len(nums) >= 1 else 1.0
-    return f_str, g_str, a, b
+    f_text = st.text_input("Outer Function f(x) (Upper):", "sqrt(x)")
+    
+    g_text = "0"
+    if method == "Washer Method":
+        g_text = st.text_input("Inner Function g(x) (Lower):", "x**2")
+    
+    axis_val = st.number_input("Axis of Rotation (y = c):", value=0.0)
+    
+    col_a, col_b = st.columns(2)
+    with col_a:
+        a_val = st.number_input("Start (a):", value=0.0)
+    with col_b:
+        b_val = st.number_input("End (b):", value=1.0)
 
-if st.button("Generate Solution & 3D Model"):
-    try:
-        # استخراج البيانات تلقائياً
-        f_in, g_in, a, b = extract_parameters(full_question)
+# Symbolic Math Processing
+x = sp.symbols('x')
+try:
+    f_expr = sp.sympify(f_text)
+    g_expr = sp.sympify(g_text)
+    
+    # Define Radii
+    R = f_expr - axis_val
+    r = g_expr - axis_val
+    
+    # Define Integrand based on method
+    if method == "Disk Method":
+        integrand = sp.pi * (R**2)
+        formula_latex = r"V = \pi \int_{a}^{b} [R(x)]^2 \, dx"
+    else:
+        integrand = sp.pi * (R**2 - r**2)
+        formula_latex = r"V = \pi \int_{a}^{b} ([R(x)]^2 - [r(x)]^2) \, dx"
+
+    # Calculate Integral
+    volume_exact = sp.integrate(integrand, (x, a_val, b_val))
+    volume_numeric = float(volume_exact.evalf())
+
+    # --- Display Solution Steps ---
+    st.header("📝 Step-by-Step Solution")
+    step_col1, step_col2 = st.columns(2)
+    
+    with step_col1:
+        st.markdown(f"**1. Formula used:**")
+        st.latex(formula_latex)
         
-        x_sym = symbols('x')
-        f_expr = sympify(f_in)
-        g_expr = sympify(g_in)
+        st.markdown(f"**2. Identify Radii:**")
+        st.write(f"Outer Radius $R(x) = {sp.latex(R)}$")
+        if method == "Washer Method":
+            st.write(f"Inner Radius $r(x) = {sp.latex(r)}$")
+            
+    with step_col2:
+        st.markdown("**3. Setup Integral:**")
+        st.latex(f"V = \int_{{{a_val}}}^{{{b_val}}} {sp.latex(integrand)} \, dx")
         
-        # الحسابات الرياضية
-        method = "Washer Method" if g_expr != 0 else "Disk Method"
-        integrand = f_expr**2 - g_expr**2
-        antiderivative = integrate(integrand, x_sym)
-        exact_val = integrate(integrand, (x_sym, a, b)) * pi
-        
-        # عرض النتائج في عمودين
-        col1, col2 = st.columns([1, 1.2])
+        st.success(f"**Result:**")
+        st.latex(f"V = {sp.latex(volume_exact)}")
+        st.write(f"Numerical Value: **{volume_numeric:.4f}** cubic units")
 
-        with col1:
-            st.subheader("📝 Detailed Solution")
-            st.write(f"**Detected Method:** {method}")
-            st.write(f"**Interval:** [{a}, {b}]")
-            st.write("---")
-            st.write("**1. Integral Setup:**")
-            st.latex(f"V = \pi \int_{{{a}}}^{{{b}}} ({integrand}) dx")
-            st.write("**2. Antiderivative:**")
-            st.latex(f"\pi \left[ {antiderivative} \\right]_{{{a}}}^{{{b}}}")
-            st.success(f"**Final Volume:** {float(exact_val.evalf()):.4f} units³")
+    # --- 3.D Visualization ---
+    st.header("🍦 3D Visualization")
+    
+    # Generate data for plotting
+    x_range = np.linspace(float(a_val), float(b_val), 60)
+    theta = np.linspace(0, 2 * np.pi, 60)
+    X_grid, Theta_grid = np.meshgrid(x_range, theta)
+    
+    f_num = sp.lambdify(x, f_expr, 'numpy')
+    g_num = sp.lambdify(x, g_expr, 'numpy')
+    
+    # Outer Surface
+    R_vals = f_num(X_grid) - axis_val
+    Y_outer = R_vals * np.cos(Theta_grid) + axis_val
+    Z_outer = R_vals * np.sin(Theta_grid)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Surface(x=X_grid, y=Y_outer, z=Z_outer, 
+                             colorscale='Viridis', opacity=0.7, 
+                             showscale=False, name='Outer Surface'))
+    
+    # Inner Surface (for Washers)
+    if method == "Washer Method":
+        r_vals = g_num(X_grid) - axis_val
+        Y_inner = r_vals * np.cos(Theta_grid) + axis_val
+        Z_inner = r_vals * np.sin(Theta_grid)
+        fig.add_trace(go.Surface(x=X_grid, y=Y_inner, z=Z_inner, 
+                                 colorscale='Reds', opacity=0.4, 
+                                 showscale=False, name='Inner Surface'))
 
-        with col2:
-            st.subheader("🧊 Interactive 3D Model")
-            # توليد نقاط الرسم 3D
-            u = np.linspace(float(a), float(b), 60)
-            v = np.linspace(0, 2*np.pi, 60)
-            U, V = np.meshgrid(u, v)
-            f_n, g_n = lambdify(x_sym, f_expr, 'numpy'), lambdify(x_sym, g_expr, 'numpy')
-            
-            # السطح الخارجي
-            X, Y, Z = U, f_n(U)*np.cos(V), f_n(U)*np.sin(V)
-            fig = go.Figure()
-            fig.add_trace(go.Surface(x=X, y=Y, z=Z, colorscale='Reds', opacity=0.8, showscale=False))
-            
-            # السطح الداخلي (Washer)
-            if g_expr != 0:
-                X2, Y2, Z2 = U, g_n(U)*np.cos(V), g_n(U)*np.sin(V)
-                fig.add_trace(go.Surface(x=X2, y=Y2, z=Z2, colorscale='Blues', opacity=0.9, showscale=False))
-            
-            fig.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z', aspectmode='data'))
-            st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        scene=dict(xaxis_title='x-axis', yaxis_title='y-axis', zaxis_title='z-axis'),
+        margin=dict(l=0, r=0, b=0, t=0)
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"Error: Please ensure the functions are written clearly (e.g., y=x**2). Detail: {e}")
+except Exception as e:
+    st.error(f"Error in mathematical expression: {e}")
+    st.info("Tip: Use '*' for multiplication and '**' for powers (e.g., x**2).")
