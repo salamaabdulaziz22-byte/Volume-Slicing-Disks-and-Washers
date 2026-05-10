@@ -1,95 +1,78 @@
 import streamlit as st
 import google.generativeai as genai
+from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 from sympy import symbols, pi, integrate, lambdify, sympify
-from PIL import Image
 import json
 
-# 1. API Configuration (Get your key at aistudio.google.com)
+# Configuration - Replace with your API Key from aistudio.google.com
 genai.configure(api_key="YOUR_API_KEY_HERE")
 model = genai.GenerativeModel('gemini-2.0-flash')
 
-def analyze_image_with_ai(image):
-    """Uses AI to 'read' the screenshot and extract math data."""
+def get_math_data(image):
+    """Parses the image to extract the functions and rotation axis."""
     prompt = """
-    Look at this math problem regarding the volume of a solid of revolution.
-    Identify:
-    1. The outer function f(x)
-    2. The inner function g(x) (set to 0 if it's a Disk problem)
-    3. The lower bound 'a' and upper bound 'b'.
-    
+    Extract the volume of revolution problem from this image.
+    Identify the outer function f(x), inner function g(x) (use 0 if none), 
+    and the interval [a, b]. 
     Return ONLY a JSON object:
-    {"f": "function_text", "g": "function_text", "a": value, "b": value, "method": "Disk or Washer"}
-    Use python math syntax (e.g., x**2 for x²).
+    {"f": "expression", "g": "expression", "a": start, "b": end, "method": "Disk or Washer"}
     """
     response = model.generate_content([prompt, image])
-    # Clean the response text to ensure it's valid JSON
-    clean_text = response.text.replace('```json', '').replace('```', '').strip()
-    return json.loads(clean_text)
+    clean_json = response.text.replace('```json', '').replace('```', '').strip()
+    return json.loads(clean_json)
 
 def main():
-    st.set_page_config(page_title="Math Vision Solver", layout="wide")
-    st.title("📸 Image-to-Volume Solver")
-    st.write("Upload a screenshot of a problem from your PDF or PPT.")
+    st.title("Calculus Volume Solver (Image Upload)")
+    uploaded_file = st.file_uploader("Upload your math problem image", type=["png", "jpg", "jpeg"])
 
-    uploaded_file = st.file_uploader("Choose an image...", type=["png", "jpg", "jpeg"])
-
-    if uploaded_file is not None:
+    if uploaded_file:
         img = Image.open(uploaded_file)
-        st.image(img, caption="Uploaded Question", width=400)
+        st.image(img, caption="Detected Question", width=300)
+        
+        if st.button("Solve with Steps"):
+            data = get_math_data(img)
+            x = symbols('x')
+            f_sym = sympify(data['f'])
+            g_sym = sympify(data['g'])
+            a, b = float(data['a']), float(data['b'])
 
-        if st.button("Extract and Solve"):
-            try:
-                with st.spinner("AI is reading the problem..."):
-                    data = analyze_image_with_ai(img)
-                
-                # Setup math variables
-                x = symbols('x')
-                f_sym = sympify(data['f'])
-                g_sym = sympify(data['g'])
-                a, b = float(data['a']), float(data['b'])
+            # Header
+            st.header(f"Method: {data['method']}")
+            
+            # Step 1: Setup
+            st.subheader("Step 1: The Integral Setup")
+            if data['method'] == "Disk":
+                integrand = pi * f_sym**2
+                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({data['f']})^2 \, dx")
+            else:
+                integrand = pi * (f_sym**2 - g_sym**2)
+                st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left[ ({data['f']})^2 - ({data['g']})^2 \right] \, dx")
 
-                # Display Results
-                st.header(f"Detected Method: {data['method']}")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Step-by-Step Solution")
-                    st.write(f"**Interval:** $[{a}, {b}]$")
-                    
-                    # Setup Integral
-                    integrand = pi * (f_sym**2 - g_sym**2)
-                    st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left( ({data['f']})^2 - ({data['g']})^2 \right) dx")
-                    
-                    # Integration
-                    antiderivative = integrate(integrand, x)
-                    result = integrate(integrand, (x, a, b))
-                    
-                    st.write("**Antiderivative:**")
-                    st.latex(rf"\pi \left[ {antiderivative/pi} \right]")
-                    
-                    st.success(f"**Final Volume:** {result} or ≈ {result.evalf():.4f}")
+            # Step 2: Anti-derivative
+            st.subheader("Step 2: Integration")
+            antideriv = integrate(integrand, x)
+            st.write("The antiderivative is:")
+            st.latex(rf"\pi \left[ {antideriv/pi} \right]_{{{a}}}^{{{b}}}")
 
-                with col2:
-                    st.subheader("Graph of the Region")
-                    x_plot = np.linspace(a, b, 100)
-                    f_func = lambdify(x, f_sym, 'numpy')
-                    g_func = lambdify(x, g_sym, 'numpy')
+            # Step 3: Final Answer
+            result = integrate(integrand, (x, a, b))
+            st.subheader("Step 3: Final Result")
+            st.success(f"Volume = {result} units³ (≈ {result.evalf():.4f})")
 
-                    fig, ax = plt.subplots()
-                    ax.plot(x_plot, f_func(x_plot), label=f"f(x)")
-                    if data['g'] != "0":
-                        ax.plot(x_plot, g_func(x_plot), label=f"g(x)")
-                    
-                    ax.fill_between(x_plot, f_func(x_plot), g_func(x_plot), color='orange', alpha=0.3)
-                    ax.set_title("Area to Rotate")
-                    ax.grid(True, linestyle='--', alpha=0.6)
-                    st.pyplot(fig)
-
-            except Exception as e:
-                st.error(f"Could not solve. Ensure the image is clear. Error: {e}")
+            # Graphing
+            st.subheader("Graph of the Region")
+            x_vals = np.linspace(a, b, 100)
+            f_num = lambdify(x, f_sym, 'numpy')(x_vals)
+            g_num = lambdify(x, g_sym, 'numpy')(x_vals) if data['g'] != "0" else np.zeros_like(x_vals)
+            
+            fig, ax = plt.subplots()
+            ax.plot(x_vals, f_num, label="f(x)")
+            if data['g'] != "0": ax.plot(x_vals, g_num, label="g(x)")
+            ax.fill_between(x_vals, f_num, g_num, color='skyblue', alpha=0.4)
+            ax.set_title("Region to be Rotated")
+            st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
