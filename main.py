@@ -1,92 +1,77 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 from sympy import symbols, pi, integrate, lambdify, sympify
-import easyocr
-from PIL import Image
-
-# Initialize the OCR reader (This reads the text from your screenshot)
-reader = easyocr.Reader(['en'])
-
-def solve_volume(f_text, g_text, a, b):
-    x = symbols('x')
-    f = sympify(f_text)
-    g = sympify(g_text)
-    
-    # Check if Disk or Washer
-    method = "Disk" if g == 0 else "Washer"
-    
-    # Formula setup
-    integrand = pi * (f**2 - g**2)
-    antiderivative = integrate(integrand, x)
-    result = integrate(integrand, (x, a, b))
-    
-    return method, f, g, antiderivative, result
 
 def main():
-    st.set_page_config(page_title="Math Homework Solver", layout="wide")
-    st.title("Step-by-Step Volume Solver")
-    st.write("Upload your problem image. I will try to read the functions for you.")
+    st.set_page_config(page_title="Math Solver", layout="centered")
+    st.title("📐 Volume of Revolution Solver")
+    st.write("Enter the functions from your slides (e.g., `x` and `x**2`).")
 
-    uploaded_file = st.file_uploader("Upload Problem Image", type=["png", "jpg", "jpeg"])
+    # Input Section
+    with st.expander("📝 Enter Problem Details", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            f_in = st.text_input("Outer Function f(x)", value="x")
+            g_in = st.text_input("Inner Function g(x) (0 for Disk)", value="x**2")
+        with col2:
+            a_val = st.number_input("Lower Bound (a)", value=0.0)
+            b_val = st.number_input("Upper Bound (b)", value=1.0)
 
-    if uploaded_file:
-        img = Image.open(uploaded_file)
-        st.image(img, width=400)
-        
-        # 1. READ TEXT FROM IMAGE
-        with st.spinner("Reading math from image..."):
-            img_np = np.array(img)
-            text_results = reader.readtext(img_np, detail=0)
-            detected_text = " ".join(text_results)
-            st.info(f"Detected Text: {detected_text}")
+    if st.button("🚀 Solve and Graph"):
+        try:
+            # Setup Symbols
+            x = symbols('x')
+            f = sympify(f_in)
+            g = sympify(g_in)
+            
+            # Determine Method
+            is_washer = g != 0
+            method_name = "Washer Method" if is_washer else "Disk Method"
+            
+            # Calculate Volume
+            # V = π ∫ (R² - r²) dx
+            integrand = pi * (f**2 - g**2)
+            antideriv = integrate(integrand, x)
+            volume = integrate(integrand, (x, a_val, b_val))
 
-        # 2. MANUAL OVERRIDE (In case OCR makes a mistake)
-        st.subheader("Confirm Details")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1: f_in = st.text_input("Outer Function f(x)", "x")
-        with col2: g_in = st.text_input("Inner Function g(x)", "x**2")
-        with col3: a_in = st.number_input("Start Bound (a)", value=0.0)
-        with col4: b_in = st.number_input("End Bound (b)", value=1.0)
+            # --- Display Steps ---
+            st.header(f"Method: {method_name}")
+            
+            st.subheader("Step 1: Setup")
+            if is_washer:
+                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} \left( [{f_in}]^2 - [{g_in}]^2 \right) dx")
+            else:
+                st.latex(rf"V = \pi \int_{{{a_val}}}^{{{b_val}}} [{f_in}]^2 dx")
 
-        if st.button("Calculate Everything"):
-            try:
-                method, f, g, anti, res = solve_volume(f_in, g_in, a_in, b_in)
-                
-                st.divider()
-                st.header(f"Method Identified: {method}")
-                
-                # Step 1: Integral Setup
-                st.write("### Step 1: Setup the Integral")
-                if method == "Disk":
-                    st.latex(rf"V = \pi \int_{{{a_in}}}^{{{b_in}}} ({f_in})^2 dx")
-                else:
-                    st.latex(rf"V = \pi \int_{{{a_in}}}^{{{b_in}}} [({f_in})^2 - ({g_in})^2] dx")
+            st.subheader("Step 2: Integration")
+            st.write("Find the antiderivative:")
+            st.latex(rf"\pi \left[ {antideriv/pi} \right]_{{{a_val}}}^{{{b_val}}}")
 
-                # Step 2: Show Anti-derivative
-                st.write("### Step 2: Find the Antiderivative")
-                st.latex(rf"\pi \left[ {anti/pi} \right]_{{{a_in}}}^{{{b_in}}}")
+            st.subheader("Step 3: Final Answer")
+            st.success(f"Exact Volume: {volume}")
+            st.write(f"Decimal Value: **{float(volume.evalf()):.4f} cubic units**")
 
-                # Step 3: Final Answer
-                st.write("### Step 3: Final Calculation")
-                st.success(f"Volume = {res} ≈ {float(res.evalf()):.4f}")
+            # --- Graphing ---
+            st.subheader("Visualization")
+            x_pts = np.linspace(float(a_val), float(b_val), 100)
+            f_func = lambdify(x, f, 'numpy')(x_pts)
+            g_func = lambdify(x, g, 'numpy')(x_pts)
 
-                # Graphing
-                st.write("### Visualization")
-                t = np.linspace(float(a_in), float(b_in), 100)
-                f_func = lambdify(symbols('x'), f, 'numpy')(t)
-                g_func = lambdify(symbols('x'), g, 'numpy')(t)
-                
-                fig, ax = plt.subplots()
-                ax.plot(t, f_func, label='f(x)')
-                if method == "Washer":
-                    ax.plot(t, g_func, label='g(x)')
-                ax.fill_between(t, f_func, g_func, color='cyan', alpha=0.3)
-                ax.set_title(f"{method} Method Region")
-                st.pyplot(fig)
+            fig, ax = plt.subplots()
+            ax.plot(x_pts, f_func, 'b', label=f'f(x)={f_in}')
+            if is_washer:
+                ax.plot(x_pts, g_func, 'r', label=f'g(x)={g_in}')
+            
+            ax.fill_between(x_pts, f_func, g_func, color='skyblue', alpha=0.4)
+            ax.set_xlabel('x')
+            ax.set_ylabel('y')
+            ax.legend()
+            ax.grid(True, linestyle='--', alpha=0.6)
+            st.pyplot(fig)
 
-            except Exception as e:
-                st.error(f"Error processing math: {e}")
+        except Exception as e:
+            st.error(f"Error in math: {e}. Check if you used 'x**2' for powers.")
 
 if __name__ == "__main__":
     main()
