@@ -1,113 +1,92 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 from sympy import symbols, pi, integrate, lambdify, sympify
-import json
-import re
+import easyocr
+from PIL import Image
 
-# 1. API SETUP
-# Get your free API key at: https://aistudio.google.com/
-genai.configure(api_key="YOUR_API_KEY_HERE")
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Initialize the OCR reader (This reads the text from your screenshot)
+reader = easyocr.Reader(['en'])
 
-def extract_math_from_image(image):
-    """
-    Sends the image to Gemini to extract functions and bounds.
-    """
-    prompt = """
-    Analyze this calculus problem about the volume of a solid of revolution.
-    Identify:
-    1. The outer function f(x).
-    2. The inner function g(x) (use '0' if it is a Disk problem).
-    3. The lower bound 'a' and upper bound 'b'.
+def solve_volume(f_text, g_text, a, b):
+    x = symbols('x')
+    f = sympify(f_text)
+    g = sympify(g_text)
     
-    Return ONLY a JSON object like this:
-    {"f": "x**2", "g": "0", "a": 0, "b": 2, "method": "Disk"}
-    Use Python math syntax (e.g., x**2 for x squared, sqrt(x) for square root).
-    """
-    response = model.generate_content([prompt, image])
-    # Clean the response to ensure it's valid JSON
-    text = response.text
-    json_match = re.search(r'\{.*\}', text, re.DOTALL)
-    if json_match:
-        return json.loads(json_match.group())
-    else:
-        raise ValueError("Could not read the math from the image.")
+    # Check if Disk or Washer
+    method = "Disk" if g == 0 else "Washer"
+    
+    # Formula setup
+    integrand = pi * (f**2 - g**2)
+    antiderivative = integrate(integrand, x)
+    result = integrate(integrand, (x, a, b))
+    
+    return method, f, g, antiderivative, result
 
 def main():
-    st.set_page_config(page_title="Volume Solver AI", layout="wide")
-    st.title("📸 Image-to-Volume Calculus Solver")
-    st.write("Upload a screenshot of a problem from your school files (Disks or Washers).")
+    st.set_page_config(page_title="Math Homework Solver", layout="wide")
+    st.title("Step-by-Step Volume Solver")
+    st.write("Upload your problem image. I will try to read the functions for you.")
 
-    uploaded_file = st.file_uploader("Choose a math problem image...", type=["png", "jpg", "jpeg"])
+    uploaded_file = st.file_uploader("Upload Problem Image", type=["png", "jpg", "jpeg"])
 
-    if uploaded_file is not None:
+    if uploaded_file:
         img = Image.open(uploaded_file)
+        st.image(img, width=400)
         
-        # Display the uploaded image
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.image(img, caption="Your Uploaded Question", use_container_width=True)
+        # 1. READ TEXT FROM IMAGE
+        with st.spinner("Reading math from image..."):
+            img_np = np.array(img)
+            text_results = reader.readtext(img_np, detail=0)
+            detected_text = " ".join(text_results)
+            st.info(f"Detected Text: {detected_text}")
 
-        if st.button("✨ Solve Question"):
+        # 2. MANUAL OVERRIDE (In case OCR makes a mistake)
+        st.subheader("Confirm Details")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1: f_in = st.text_input("Outer Function f(x)", "x")
+        with col2: g_in = st.text_input("Inner Function g(x)", "x**2")
+        with col3: a_in = st.number_input("Start Bound (a)", value=0.0)
+        with col4: b_in = st.number_input("End Bound (b)", value=1.0)
+
+        if st.button("Calculate Everything"):
             try:
-                with st.spinner("AI is reading the problem and calculating..."):
-                    # Step 1: AI Image Recognition
-                    data = extract_math_from_image(img)
-                    
-                    # Step 2: Math Setup
-                    x = symbols('x')
-                    f_sym = sympify(data['f'])
-                    g_sym = sympify(data['g'])
-                    a = float(data['a'])
-                    b = float(data['b'])
-                    
-                    # Step 3: Integration Logic
-                    # V = π ∫ [f(x)^2 - g(x)^2] dx
-                    integrand = pi * (f_sym**2 - g_sym**2)
-                    antiderivative = integrate(integrand, x)
-                    volume_exact = integrate(integrand, (x, a, b))
+                method, f, g, anti, res = solve_volume(f_in, g_in, a_in, b_in)
+                
+                st.divider()
+                st.header(f"Method Identified: {method}")
+                
+                # Step 1: Integral Setup
+                st.write("### Step 1: Setup the Integral")
+                if method == "Disk":
+                    st.latex(rf"V = \pi \int_{{{a_in}}}^{{{b_in}}} ({f_in})^2 dx")
+                else:
+                    st.latex(rf"V = \pi \int_{{{a_in}}}^{{{b_in}}} [({f_in})^2 - ({g_in})^2] dx")
 
-                with col2:
-                    st.header(f"Method: {data['method']}")
-                    st.info(f"**Detected Functions:** f(x)={data['f']}, g(x)={data['g']} from {a} to {b}")
-                    
-                    # Show Steps in LaTeX
-                    st.subheader("Solution Steps:")
-                    st.write("**1. Setup the Integral:**")
-                    if data['g'] == "0":
-                        st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} ({data['f']})^2 \, dx")
-                    else:
-                        st.latex(rf"V = \pi \int_{{{a}}}^{{{b}}} \left[ ({data['f']})^2 - ({data['g']})^2 \right] \, dx")
+                # Step 2: Show Anti-derivative
+                st.write("### Step 2: Find the Antiderivative")
+                st.latex(rf"\pi \left[ {anti/pi} \right]_{{{a_in}}}^{{{b_in}}}")
 
-                    st.write("**2. Find the Antiderivative:**")
-                    # We divide by pi in the display to keep the pi symbol outside the brackets
-                    st.latex(rf"V = \pi \left[ {antiderivative/pi} \right]_{{{a}}}^{{{b}}}")
+                # Step 3: Final Answer
+                st.write("### Step 3: Final Calculation")
+                st.success(f"Volume = {res} ≈ {float(res.evalf()):.4f}")
 
-                    st.write("**3. Final Result:**")
-                    st.success(f"Volume = {volume_exact} units³")
-                    st.write(f"Decimal Approximation: **{float(volume_exact.evalf()):.4f}**")
-
-                    # Step 4: Generate the Graph
-                    st.subheader("2D Region Visualization")
-                    x_vals = np.linspace(a, b, 100)
-                    f_num = lambdify(x, f_sym, 'numpy')(x_vals)
-                    g_num = lambdify(x, g_sym, 'numpy')(x_vals) if data['g'] != "0" else np.zeros_like(x_vals)
-
-                    fig, ax = plt.subplots()
-                    ax.plot(x_vals, f_num, label=f"f(x)={data['f']}", color="blue")
-                    if data['g'] != "0":
-                        ax.plot(x_vals, g_num, label=f"g(x)={data['g']}", color="red")
-                    
-                    ax.fill_between(x_vals, f_num, g_num, color='gray', alpha=0.3, label="Area to rotate")
-                    ax.axhline(0, color='black', linewidth=1)
-                    ax.legend()
-                    st.pyplot(fig)
+                # Graphing
+                st.write("### Visualization")
+                t = np.linspace(float(a_in), float(b_in), 100)
+                f_func = lambdify(symbols('x'), f, 'numpy')(t)
+                g_func = lambdify(symbols('x'), g, 'numpy')(t)
+                
+                fig, ax = plt.subplots()
+                ax.plot(t, f_func, label='f(x)')
+                if method == "Washer":
+                    ax.plot(t, g_func, label='g(x)')
+                ax.fill_between(t, f_func, g_func, color='cyan', alpha=0.3)
+                ax.set_title(f"{method} Method Region")
+                st.pyplot(fig)
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error processing math: {e}")
 
 if __name__ == "__main__":
     main()
