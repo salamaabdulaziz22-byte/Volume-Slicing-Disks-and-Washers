@@ -17,7 +17,7 @@ variable = 'x' if axis_choice == "x-axis" else 'y'
 f_input = st.sidebar.text_input(f"Outer Function f({variable})", "sqrt(x)" if variable == 'x' else "y**2")
 g_input = st.sidebar.text_input(f"Inner Function g({variable}) (0 for Disk)", "0")
 a_val = st.sidebar.number_input(f"Lower Limit ({variable} = a)", value=0.0)
-b_val = st.sidebar.number_input(f"Upper Limit ({variable} = b)", value=4.0)
+b_val = st.sidebar.number_input(f"Upper Limit ({variable} = b)", value=0.0)
 
 if st.button("Solve & Generate Steps"):
     try:
