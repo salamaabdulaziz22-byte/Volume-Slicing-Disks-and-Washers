@@ -1,100 +1,81 @@
-import streamlit as st
-import sympy as sp
-import numpy as np
-import plotly.graph_objects as go
+## Goal
 
-# إعدادات واجهة الموقع
-st.set_page_config(page_title="Math Solver", layout="wide")
+Express the radius the way it's actually computed in class:
 
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
+- **Axis horizontal** (`y = k`) → radius is **vertical**, so the radius is a difference of **y-values** (top y − bottom y).
+- **Axis vertical** (`x = h`) → radius is **horizontal**, so the radius is a difference of **x-values** (right x − left x).
 
-st.title("📐 Volume of Revolution Solver")
-st.write("أداة حل مسائل الحجوم الدورانية بالخطوات والرسم ثلاثي الأبعاد")
+Apply this to both Step 5 (find the radius) and Step 6 (substitute into the formula), for Disk and Washer cases.
 
-# تقسيم الصفحة لخانة معطيات وخانة حل
-col_input, col_solution = st.columns([1, 2])
+## Where this lives
 
-with col_input:
-    st.header("📥 المعطيات")
-    with st.container():
-        method = st.selectbox("اختر الطريقة:", ["Disk Method", "Washer Method"])
-        f_txt = st.text_input("الدالة الخارجية f(x):", "sqrt(x)")
-        g_txt = "0"
-        if method == "Washer Method":
-            g_txt = st.text_input("الدالة الداخلية g(x):", "x**2")
-        
-        col_range = st.columns(2)
-        with col_range[0]:
-            a_val = st.number_input("بداية الفترة (a):", value=0.0)
-        with col_range[1]:
-            b_val = st.number_input("نهاية الفترة (b):", value=1.0)
-            
-        axis_val = st.number_input("محور الدوران y =", value=0.0)
-        solve_btn = st.button("احسب الحل")
+`src/lib/volume.ts`, in `solveVolume`. Steps 5 and 6 currently render the radius as `|f(t) − axisValue|`. We'll switch to the "top − bottom" / "right − left" form, picking the correct top/bottom (or right/left) curve at the midpoint of `[a, b]`.
 
-# محرك الحل الرياضي والرسم
-x = sp.symbols('x')
-if solve_btn:
-    try:
-        f_expr = sp.sympify(f_txt)
-        g_expr = sp.sympify(g_txt)
-        
-        R = f_expr - axis_val
-        r = g_expr - axis_val
-        
-        # صيغة التكامل
-        integrand = sp.pi * (R**2 - r**2)
-        volume_exact = sp.integrate(integrand, (x, a_val, b_val))
-        volume_numeric = float(volume_exact.evalf())
+## Conventions
 
-        with col_solution:
-            st.header("📝 خطوات الحل")
-            st.info(f"تم استخدام طريقة: **{method}**")
-            
-            # عرض الخطوات الرياضية
-            st.write("**1. تحديد أنصاف الأقطار:**")
-            st.latex(f"R(x) = {sp.latex(R)}")
-            if method == "Washer Method":
-                st.latex(f"r(x) = {sp.latex(r)}")
-            
-            st.write("**2. إعداد التكامل:**")
-            st.latex(f"V = \pi \int_{{{a_val}}}^{{{b_val}}} ({sp.latex(R**2 - r**2)}) \, dx")
-            
-            st.write("**3. النتيجة النهائية:**")
-            st.success(f"الحجم = {volume_numeric:.4f} وحدة مكعبة")
-            st.latex(f"V = {sp.latex(volume_exact)}")
+Let `u` be the dependent direction (perpendicular to the integration variable):
 
-            # الرسم ثلاثي الأبعاد
-            st.header("🍦 الرسم ثلاثي الأبعاد")
-            u = np.linspace(float(a_val), float(b_val), 40)
-            v = np.linspace(0, 2*np.pi, 40)
-            U, V = np.meshgrid(u, v)
+- `tVar = x`, `axisVar = y` → `u = y`. "Top" = larger y, "Bottom" = smaller y. Radius is in y.
+- `tVar = y`, `axisVar = x` → `u = x`. "Right" = larger x, "Left" = smaller x. Radius is in x.
 
-            f_num = sp.lambdify(x, f_expr, 'numpy')
-            g_num = sp.lambdify(x, g_expr, 'numpy')
+At the midpoint `tMid = (a+b)/2`, gather `u`-values from each non-tLine boundary using existing `valuesAt`. Add the axis itself (`axisValue`) as a virtual candidate when classifying which side of the region the axis sits on.
 
-            def get_coords(func_num):
-                # حماية من القيم غير المعرفة (NaN)
-                rad = np.nan_to_num(func_num(U).astype(float)) - axis_val
-                Y = rad * np.cos(V) + axis_val
-                Z = rad * np.sin(V)
-                return Y, Z
+### Disk (region's near edge is the axis)
 
-            fig = go.Figure()
-            Y1, Z1 = get_coords(f_num)
-            fig.add_trace(go.Surface(x=U, y=Y1, z=Z1, colorscale='Viridis', opacity=0.8, showscale=False))
-            
-            if method == "Washer Method":
-                Y2, Z2 = get_coords(g_num)
-                fig.add_trace(go.Surface(x=U, y=Y2, z=Z2, colorscale='Reds', opacity=0.5, showscale=False))
+The radius spans from the axis to the far edge of the region.
 
-            fig.update_layout(margin=dict(l=0, r=0, b=0, t=0))
-            st.plotly_chart(fig, use_container_width=True)
+- Horizontal axis: `R(x) = topCurve(x) − k` if the region is above the axis, or `R(x) = k − bottomCurve(x)` if below. Equivalently: `R = top − bottom` where one of {top, bottom} is the axis.
+- Vertical axis: `R(y) = rightCurve(y) − h` or `h − leftCurve(y)`.
 
-    except Exception as e:
-        st.error(f"تأكد من كتابة الدالة بشكل صحيح. مثال: x**2 أو sqrt(x)")
+Step 5 text (Disk, axis horizontal):
+```
+Radius is vertical (axis is horizontal y = k), so R = (top y) − (bottom y).
+Top:    y = <farCurve.label or "k">
+Bottom: y = <nearCurve.label or "k">
+R(x) = <farExpr> − <nearExpr>
+```
+
+Vertical axis variant swaps wording to "right x − left x".
+
+### Washer (gap between region and axis)
+
+Both edges of the region are away from the axis.
+
+- Horizontal axis: `R(x) = topCurve(x) − k`, `r(x) = bottomCurve(x) − k` (when region is fully above axis). Mirror when fully below.
+- Vertical axis: `R(y) = rightCurve(y) − h`, `r(y) = leftCurve(y) − h`.
+
+Step 5 text (Washer, axis horizontal):
+```
+Radius is vertical (axis is horizontal y = k), so each radius = (a y-value) − (axis y).
+Outer R(x) = (farther y) − k = <farCurve> − <k>
+Inner r(x) = (closer y) − k = <nearCurve> − <k>
+```
+
+Vertical axis variant uses "(an x-value) − h" with right/left.
+
+### Step 6 substitution
+
+Render the integrand using the symbolic `R` and `r` strings built in Step 5 (don't re-derive). Examples:
+
+- Disk: `V = π ∫ₐᵇ ( <farExpr> − <nearExpr> )² dt`
+- Washer: `V = π ∫ₐᵇ ( (<topExpr> − k)² − (<bottomExpr> − k)² ) dt`
+
+## Implementation outline
+
+In `solveVolume`, after `tMid` / `scored` are computed:
+
+1. Build `uAt(p)` returning the representative `u`-value of boundary `p` at `tMid` (use the closest-to-axis or first sample from `valuesAt`; for `uConst` it's `p.u`).
+2. Determine `aboveAxis` = whether the region's u-values sit above or below `axisValue` at `tMid` (sign of `medianU − axisValue`). For washer this picks orientation; for disk it determines which side is the axis.
+3. Pick `farCurve` (max `|u − axis|`) and `nearCurve` (min `|u − axis|`) at `tMid`. For disk, the near edge is the axis itself, so render the near term as `axisValue` rather than a curve.
+4. Helper `exprFor(p)` returns the raw RHS of a `direct` boundary (`label.split("=")[1]`) or the constant for `uConst`. Skip any boundary whose dependent variable doesn't match `axisVar` (we can't write its u-value as a simple expression in t; fall back to the existing `R(t)`/`r(t)` placeholder in that case).
+5. Build symbolic strings:
+   - `Rsym = "(" + farExpr + ") − (" + axisValue + ")"` (or flipped if region below axis), simplifying when `axisValue === 0` to just `(farExpr)`.
+   - `rsym` similarly for washer.
+   - For disk, `Rsym = "(" + topExpr + ") − (" + bottomExpr + ")"` where one of those is the axis value.
+6. Use `Rsym`/`rsym` in Step 5 body and Step 6 body.
+
+## Out of scope
+
+- No change to numerical integration (`Rfun`, `rfun`, `simpson`) — this is a presentation/derivation change.
+- No change to `parseBoundary`, `makeTraces`, or `FunctionPlot`.
+- Disk-vs-washer detection logic stays as-is for this change.
